@@ -149,6 +149,8 @@
       <button id="btnRec" class="rec">● 録音開始</button>
       <span id="recStat" class="stat">待機中</span>
       <span style="flex:1 1 auto"></span>
+      <button id="btnPlay">▶ 再生</button>
+      <select id="outSel" title="再生の出力先"></select>
       <select id="takeSel" title="録音の一覧"></select>
       <button id="btnMid">.mid</button>
       <button id="btnJson">.json</button>
@@ -263,6 +265,7 @@ async function connectMidi(){
 function attachMidi(){
   const names=[];
   for(const i of midi.inputs.values()){ i.onmidimessage = ev=>handleMessage(ev.data); names.push(i.name); }
+  refreshOutputs();
   if(!names.length) setStatus('入力デバイスが見つかりません（電源・Bluetooth MIDI のペアリングを確認）','warn');
   else setStatus('接続済み：'+names.join(' / '),'ok');
 }
@@ -383,7 +386,8 @@ function drawKeyboard(){
 /* =======================================================================
    大譜表
    時間の情報は持たないので、いま鳴っている音を全音符の玉で置くだけ。
-   音部記号はフォントに頼らず自前で描く（音楽記号フォントは環境によって無い）。
+   記号は Bravura の輪郭を埋め込んで使う（フォント自体は入れない。環境に
+   楽譜用フォントがあるとは限らないため）。
    ======================================================================= */
 const SP=9, HS=SP/2;              /* 五線の間隔と、その半分（＝1段） */
 const TREB_E4_Y=126;              /* 高音部譜表の下線 E4 */
@@ -392,50 +396,35 @@ const STAFF_X0=14, STAFF_X1=416;
 const yTreble = step => TREB_E4_Y-(step-30)*HS;
 const yBass   = step => BASS_G2_Y-(step-18)*HS;
 
-/* ト音記号：渦（対数らせん）＋上のループ＋縦棒＋下のはね。G4線の上に渦の中心を置く */
-function gClef(x,yG){
-  const u=SP, P=(a,b)=>`${(x+a*u).toFixed(2)} ${(yG+b*u).toFixed(2)}`;
-  /* 下のはね → 縦線 → 上の折り返し → 左をふくらませながら下降 → 渦 */
-  let d=`M ${P(-0.75,2.80)} C ${P(-0.30,2.95)} ${P(0.10,2.40)} ${P(0.16,1.68)} `
-      + `C ${P(0.36,1.00)} ${P(0.34,-1.60)} ${P(0.24,-3.40)} `
-      + `C ${P(0.18,-4.15)} ${P(-0.52,-4.38)} ${P(-0.78,-3.65)} `
-      + `C ${P(-0.84,-3.00)} ${P(-0.80,-1.85)} ${P(-1.22,-0.77)} `;
-  /* 渦：中心は G4 の線の上。はじめの3/4周はふくらみ（半径そのまま）、
-     そのあと e^(-ks) で内へ巻き込む。ずっと指数だと椀が浅くなる。 */
-  const r0=1.443*u, k=0.20, HOLD=2.0, phi0=Math.atan2(-0.77,-1.22);
-  const N=72, SMAX=HOLD+2*Math.PI*1.4;
-  for(let i=1;i<=N;i++){
-    const s=SMAX*i/N, r=r0*Math.exp(-k*Math.max(0,s-HOLD)), a=phi0-s;
-    d+=`L ${(x+r*Math.cos(a)).toFixed(2)} ${(yG+r*Math.sin(a)).toFixed(2)} `;
-  }
-  return `<path d="${d}" fill="none" stroke="var(--ink)" stroke-width="${(0.22*u).toFixed(2)}" `
-       + `stroke-linecap="round" stroke-linejoin="round"/>`;
+/* --- 記号の字形 ------------------------------------------------------------
+   音部記号などは Bravura（MuseScore 同梱、SIL OFL 1.1）の輪郭を必要な字だけ
+   取り出して埋め込んだもの。フォント側の座標は上向き、五線の1間隔が200単位、
+   五線上の位置の基準は y=400。ただしト音記号は G4 の線（y=200）、ヘ音記号は
+   F3 の線（y=600）が基準になっている。 */
+const GLYPH={
+  'gClef':'M301 532C299 542 301 542 306 547C392 633 458 724 458 852C458 922 438 990 406 1038C394 1056 373 1078 364 1078C353 1078 328 1058 312 1040C253 974 234 874 234 791C234 745 239 693 245 660C246 650 247 649 238 641C123 546 0 431 0 270C0 130 95 -2 291 -2C310 -2 330 0 346 3C355 5 357 6 358 -4C368 -58 380 -127 380 -165C380 -283 300 -298 253 -298C210 -298 189 -285 189 -274C189 -269 196 -266 214 -261C239 -254 268 -232 268 -186C268 -142 240 -104 191 -104C138 -104 106 -146 106 -196C106 -248 137 -326 258 -326C311 -326 415 -302 415 -166C415 -121 401 -45 392 5C390 14 391 14 402 18C483 50 537 118 537 209C537 311 462 402 344 402C323 402 323 402 321 416ZM376 954C402 954 424 933 424 889C424 799 348 729 285 673C279 668 276 669 274 679C271 700 270 727 270 753C270 878 327 954 376 954ZM289 410C291 394 291 395 277 390C206 366 161 303 161 235C161 163 198 112 253 94C259 91 269 89 274 89C281 89 284 93 284 98C284 103 278 106 272 108C238 122 214 157 214 194C214 239 246 274 294 287C307 290 309 290 310 281L350 42C352 34 351 34 339 31C326 29 310 27 294 27C154 27 64 105 64 216C64 351 163 438 261 515C269 522 270 521 272 512ZM344 282C342 292 343 294 353 294C418 288 471 234 471 163C471 113 441 72 396 50C386 45 385 45 383 54Z',
+  'fClef':'M202 810C62 810 0 708 0 631C0 567 34 512 98 512C149 512 183 547 183 597C183 648 146 680 106 680C85 680 77 674 66 674C56 674 54 681 54 689C54 721 102 779 183 779C268 779 305 696 305 570C305 346 194 223 8 116C1 112 -4 108 -4 102C-4 97 -1 92 6 92C10 92 15 94 20 96C217 193 425 334 425 578C425 717 340 810 202 810ZM503 744C478 744 459 725 459 700C459 675 478 656 503 656C528 656 547 675 547 700C547 725 528 744 503 744ZM504 543C479 543 461 525 461 500C461 475 479 457 504 457C529 457 547 475 547 500C547 525 529 543 504 543Z',
+  'brace':'M16 398C39 413 66 470 66 517C66 521 66 526 65 530C59 578 35 652 35 695C35 737 54 777 58 784C60 789 62 790 62 792C62 794 59 798 57 798C55 798 54 796 50 792C33 770 11 724 11 644C11 565 39 533 39 482C39 445 24 424 2 398C16 382 39 370 39 318C39 262 11 212 11 154C11 74 33 27 50 5C54 1 55 0 57 0C58 0 59 1 60 2C61 2 62 3 62 5C62 7 61 9 58 14C54 20 35 60 35 102C35 145 59 220 65 267C66 271 66 275 66 280C66 327 39 384 16 398Z',
+  'whole':'M173 500C66 500 0 456 0 402C0 348 46 300 165 300C296 300 338 346 338 402C338 458 247 500 173 500ZM152 482C207 482 251 423 251 375C251 370 250 365 250 360C246 340 234 326 214 322C206 319 198 318 190 318C182 318 176 319 169 322C155 326 142 333 131 342C106 367 86 394 86 431C86 471 116 482 152 482Z',
+  'acc-2':'M251 521C236 521 226 516 214 508C208 505 202 498 194 498C193 498 191 498 190 498C185 500 182 506 182 512C182 529 187 722 187 737C187 746 180 750 172 750C162 750 149 742 147 729C147 729 148 619 150 508C138 516 124 521 109 521H104C100 521 96 521 93 520C83 518 74 513 66 508C60 505 54 498 47 498C46 498 45 498 43 498C38 500 34 506 34 512C34 529 40 722 40 737C40 746 33 750 25 750C14 750 1 742 0 729C0 729 4 271 10 264C12 261 14 260 17 260C19 260 22 262 22 262C46 274 66 297 85 310C114 331 137 353 152 372C154 312 155 266 158 264C160 261 162 260 164 260C166 260 169 262 169 262C194 274 213 297 231 310C303 360 329 409 329 446C329 490 294 520 256 521ZM54 326C51 324 48 323 46 323C40 323 38 331 38 336C38 336 35 383 35 414C35 427 36 437 37 440C42 456 76 480 94 480C117 480 126 453 126 433C126 388 90 349 54 326ZM259 386C252 371 210 323 194 323C187 323 185 331 185 336C185 336 182 391 182 422C182 430 182 438 183 440C186 450 208 468 220 474C227 478 234 480 241 480C249 480 255 478 260 472C267 462 272 449 272 433C272 418 268 402 259 386Z',
+  'acc-1':'M10 264C12 261 14 260 17 260C19 260 22 262 22 262C46 275 65 297 85 310C156 360 181 409 181 446C181 491 146 520 109 522C103 522 98 522 92 520C83 518 74 514 65 509C60 505 51 498 47 498C46 498 45 498 43 498C38 501 34 506 34 512C35 530 40 722 40 738C40 746 33 751 25 751C14 751 1 743 0 729C0 729 3 272 10 264ZM38 335C38 335 35 383 35 415C35 428 36 438 37 441C42 456 75 480 93 480C116 480 126 453 126 434C126 419 122 402 112 386C105 371 63 323 46 323C39 323 38 331 38 335Z',
+  'acc0':'M113 545C111 545 110 544 110 544C110 544 58 526 38 526C33 526 30 526 30 530V663C30 669 25 673 20 673H10C4 673 0 669 0 663V251C0 246 2 244 7 244L9 245C10 245 11 245 12 246C23 250 68 270 91 270C99 270 105 267 105 261V142C105 136 109 132 114 132H125C130 132 134 136 134 142V543C134 547 131 550 128 550C127 550 126 550 125 549ZM30 431C30 442 78 463 98 463C102 463 105 462 105 459V377C105 362 59 344 39 344C34 344 30 346 30 349Z',
+  'acc1':'M190 494C195 497 199 503 199 508V565C199 569 197 571 194 571C192 571 191 571 190 570C190 570 174 564 170 563C164 563 158 567 158 574V671C158 676 154 680 147 680C139 680 134 676 134 671V567C134 559 131 549 124 544C114 538 87 527 74 524C66 524 64 534 64 540V636C64 641 58 645 53 645C45 645 40 641 40 636V528C40 517 35 509 30 506C26 504 10 498 10 498C4 496 0 490 0 485V428C0 423 2 421 7 421H9C10 422 22 426 27 430C35 430 40 424 40 416V337C40 328 36 321 31 318C26 317 10 310 10 310C4 308 0 302 0 297V240C0 235 2 233 7 233H9C10 234 21 238 28 241C29 242 30 242 30 242C36 242 40 233 40 229V130C40 126 45 122 50 122C58 122 64 126 64 130V242C64 252 68 258 72 259L121 279C121 279 121 279 122 279L123 280C130 280 134 270 134 266V166C134 161 139 157 145 157C154 157 158 161 158 166V279C158 286 162 295 167 298C173 300 190 306 190 306C195 309 199 315 199 320V377C199 381 197 383 194 383C192 383 191 383 190 382L169 374C164 374 158 379 158 389V463C158 469 162 484 169 486ZM134 364C130 348 92 332 74 332C69 332 65 334 64 336C62 339 62 357 62 376C62 401 62 429 64 435C66 449 102 466 122 466C128 466 133 464 134 461C136 457 138 437 138 415C138 394 136 371 134 364Z',
+  'acc2':'M152 374C143 379 114 395 114 401C114 412 141 424 152 428C155 428 158 427 162 427C174 427 186 430 192 435C196 439 198 451 198 464C198 496 194 502 162 502C148 502 134 500 130 496C126 494 126 479 126 465C122 456 109 427 99 427C88 427 75 454 72 465C72 478 70 493 66 496C62 500 50 502 37 502C23 502 9 500 4 496C2 494 0 481 0 466C0 452 2 438 4 435C10 430 24 427 38 427C41 427 43 428 46 428C54 423 83 407 83 402C83 391 58 378 46 374H38C24 374 9 373 4 369C2 366 0 353 0 338C0 324 2 310 4 308C10 303 22 300 36 300C48 300 61 302 66 308C70 312 72 326 72 338C72 339 73 341 74 342C78 353 88 375 98 375C109 375 122 350 126 338C126 324 126 310 130 308C135 303 148 300 162 300C192 300 198 308 198 337C198 350 195 365 192 369C188 373 174 374 160 374Z',
+};
+const GW={"gClef":537,"fClef":551,"brace":64,"whole":338,"acc-2":329,"acc-1":181,"acc0":134,"acc1":199,"acc2":198};
+const GK=SP/200;                       /* フォント単位 → 画面の単位 */
+const NHW=GW.whole*GK;                 /* 全音符の玉の幅 */
+const accW=a=>GW["acc"+a]*GK;
+/* x は字形の左端、y は五線上の位置 */
+function glyph(name,x,y,anchor,color){
+  return `<path d="${GLYPH[name]}" transform="translate(${x.toFixed(2)},${(y+anchor*GK).toFixed(2)}) `
+       + `scale(${GK.toFixed(5)},${(-GK).toFixed(5)})" fill="${color}"/>`;
 }
-/* ヘ音記号：F3線の上の玉から始まるコンマと、線を挟む2つの点 */
-function fClef(x,yF){
-  const u=SP;
-  const d=`M ${(x+0.40*u).toFixed(2)} ${(yF-0.32*u).toFixed(2)} `
-        + `C ${(x+1.30*u).toFixed(2)} ${(yF-0.35*u).toFixed(2)} ${(x+1.42*u).toFixed(2)} ${(yF+0.85*u).toFixed(2)} ${(x+0.92*u).toFixed(2)} ${(yF+1.60*u).toFixed(2)} `
-        + `C ${(x+0.42*u).toFixed(2)} ${(yF+2.35*u).toFixed(2)} ${(x-0.35*u).toFixed(2)} ${(yF+2.72*u).toFixed(2)} ${(x-0.90*u).toFixed(2)} ${(yF+2.86*u).toFixed(2)}`;
-  return `<path d="${d}" fill="none" stroke="var(--ink)" stroke-width="${(0.40*u).toFixed(2)}" stroke-linecap="round"/>`
-       + `<circle cx="${(x+0.30*u).toFixed(2)}" cy="${(yF-0.04*u).toFixed(2)}" r="${(0.44*u).toFixed(2)}" fill="var(--ink)"/>`
-       + `<circle cx="${(x+1.78*u).toFixed(2)}" cy="${(yF-0.5*u).toFixed(2)}" r="${(0.16*u).toFixed(2)}" fill="var(--ink)"/>`
-       + `<circle cx="${(x+1.78*u).toFixed(2)}" cy="${(yF+0.5*u).toFixed(2)}" r="${(0.16*u).toFixed(2)}" fill="var(--ink)"/>`;
-}
-/* 全音符の玉。外の楕円を塗り、内側を紙の色でくり抜く */
-function noteHead(x,y,color){
-  return `<g transform="translate(${x.toFixed(2)},${y.toFixed(2)})">`
-       + `<ellipse rx="${(0.70*SP).toFixed(2)}" ry="${(0.47*SP).toFixed(2)}" transform="rotate(-16)" fill="${color}"/>`
-       + `<ellipse rx="${(0.38*SP).toFixed(2)}" ry="${(0.19*SP).toFixed(2)}" transform="rotate(22)" fill="var(--paper)"/>`
-       + `</g>`;
-}
-const accGlyph = a => a===1?'♯':a===-1?'♭':a===0?'♮':a===2?'𝄪':'𝄫';
-function accText(x,y,a,color){
-  const dy = a===-1 ? 0.30*SP : 0.02*SP;       /* ♭ は字面の中心が下寄りなので下げる */
-  return `<text x="${x.toFixed(2)}" y="${(y+dy).toFixed(2)}" font-size="${(2.6*SP).toFixed(1)}" `
-       + `text-anchor="middle" dominant-baseline="central" fill="${color}" `
-       + `font-family="'Times New Roman',serif">${accGlyph(a)}</text>`;
-}
+const gClef    = (x,yG)      => glyph("gClef",x,yG,200,"var(--ink)");
+const fClef    = (x,yF)      => glyph("fClef",x,yF,600,"var(--ink)");
+const noteHead = (x,y,color) => glyph("whole",x,y,400,color);
+const accGlyph = (x,y,a,col) => glyph("acc"+a,x,y,400,col);
 
 /* 調号の位置（五線の段）。高音部の値から14引くと低音部になる */
 const SHARP_STEPS_T=[38,35,39,36,33,37,34];
@@ -461,7 +450,7 @@ function drawStaff(){
 
   /* 調号の幅 */
   const nAcc=Math.abs(sig);
-  const KSX=STAFF_X0+46, KSW=9.4;
+  const KSX=STAFF_X0+50, KSW=(sig>=0?1.10:0.95)*SP;
   const ksEnd = KSX + nAcc*KSW;
 
   /* 変化記号は音符の左に列を作って避ける（上から順に、空いている列へ） */
@@ -484,28 +473,30 @@ function drawStaff(){
   };
   const T=layout('t'), B=layout('b');
   const maxCol=Math.max(T.ncol,B.ncol);
+  const ACOL=1.15*SP;                      /* 変化記号1列ぶんの幅 */
   /* 音符は残りの幅の真ん中あたりに置く。左に寄せると右が間延びして見える */
-  const NOTE_X = Math.max(ksEnd+26+maxCol*11.5, (ksEnd+STAFF_X1)/2);
+  const NOTE_X = Math.max(ksEnd+1.6*SP+maxCol*ACOL, (ksEnd+STAFF_X1)/2);
 
   /* 五線 */
   const lines=(y0)=>{ let o=''; for(let i=0;i<5;i++) o+=`<rect x="${STAFF_X0}" y="${(y0+i*SP-0.55).toFixed(2)}" width="${STAFF_X1-STAFF_X0}" height="1.1" fill="var(--ink)" opacity="0.85"/>`; return o; };
   s+=lines(TREB_E4_Y-4*SP);
   s+=lines(BASS_G2_Y-4*SP);
   /* 左端の縦線と中括弧 */
-  const yTop=TREB_E4_Y-4*SP, yBot=BASS_G2_Y, h=yBot-yTop, ym=(yTop+yBot)/2;
+  const yTop=TREB_E4_Y-4*SP, yBot=BASS_G2_Y, h=yBot-yTop;
   s+=`<rect x="${STAFF_X0-0.6}" y="${yTop}" width="1.4" height="${h}" fill="var(--ink)"/>`;
-  s+=`<path d="M ${STAFF_X0-4} ${yTop} C ${STAFF_X0-12} ${yTop+h*0.16} ${STAFF_X0-3} ${ym-h*0.10} ${STAFF_X0-9} ${ym} `
-    +`C ${STAFF_X0-3} ${ym+h*0.10} ${STAFF_X0-12} ${yBot-h*0.16} ${STAFF_X0-4} ${yBot}" `
-    +`fill="none" stroke="var(--ink)" stroke-width="1.6" stroke-linecap="round"/>`;
+  /* 中括弧は縦に伸ばして使う字形。縦横おなじ倍率で拡大すれば太さも釣り合う */
+  const bs=h/798;
+  s+=`<path d="${GLYPH.brace}" transform="translate(${(STAFF_X0-3-66*bs).toFixed(2)},${yBot.toFixed(2)}) `
+    +`scale(${bs.toFixed(5)},${(-bs).toFixed(5)})" fill="var(--ink)"/>`;
   /* 音部記号 */
-  s+=gClef(STAFF_X0+22, yTreble(32));      /* 渦は G4 の線 */
-  s+=fClef(STAFF_X0+20, yBass(24));        /* 玉は F3 の線 */
+  s+=gClef(STAFF_X0+8, yTreble(32));       /* 渦は G4 の線 */
+  s+=fClef(STAFF_X0+8, yBass(24));         /* 玉は F3 の線 */
   /* 調号 */
   const ord = sig>=0?SHARP_STEPS_T:FLAT_STEPS_T;
   for(let i=0;i<nAcc;i++){
-    const a = sig>=0?1:-1, x=KSX+i*KSW+KSW/2;
-    s+=accText(x, yTreble(ord[i]),      a, 'var(--ink)');
-    s+=accText(x, yBass(ord[i]-14),     a, 'var(--ink)');
+    const a = sig>=0?1:-1, x=KSX+i*KSW;
+    s+=accGlyph(x, yTreble(ord[i]),  a, 'var(--ink)');
+    s+=accGlyph(x, yBass(ord[i]-14), a, 'var(--ink)');
   }
 
   /* 音符 */
@@ -514,7 +505,7 @@ function drawStaff(){
     const yOf = st==='t'?yTreble:yBass;
     const inner = st==='t'?[30,38]:[18,26];
     for(const o of res.list){
-      const y=yOf(o.step), x=NOTE_X+(o.shift?1.42*SP:0);
+      const y=yOf(o.step), x=NOTE_X+(o.shift?NHW:0);
       if(y<yLo) yLo=y;
       if(y>yHi) yHi=y;
       /* 加線 */
@@ -523,12 +514,13 @@ function drawStaff(){
         const dir = o.step>inner[1] ? 2 : -2;
         for(let L=from; dir>0 ? L<=o.step : L>=o.step; L+=dir){
           const ly=yOf(L);
-          s+=`<rect x="${(x-1.15*SP).toFixed(2)}" y="${(ly-0.55).toFixed(2)}" width="${(2.3*SP).toFixed(2)}" height="1.1" fill="var(--ink)" opacity="0.85"/>`;
+          s+=`<rect x="${(x-0.3*SP).toFixed(2)}" y="${(ly-0.6).toFixed(2)}" width="${(NHW+0.6*SP).toFixed(2)}" height="1.2" fill="var(--ink)"/>`;
         }
       }
       const col = o.pedalOnly ? "var(--inkdim)" : "var(--ink)";
       s+=noteHead(x,y,col);
-      if(o.needAcc) s+=accText(NOTE_X-1.5*SP-o.accCol*11.5, y, o.alter, col);
+      /* 変化記号は玉の左。列が増えるほど左へ逃がす */
+      if(o.needAcc) s+=accGlyph(NOTE_X-0.3*SP-o.accCol*ACOL-accW(o.alter), y, o.alter, col);
     }
   };
   drawSide(T,'t'); drawSide(B,'b');
@@ -620,7 +612,7 @@ function renderLiveNow(){
    録音
    ======================================================================= */
 function rec(e){
-  if(!S.recording) return;
+  if(!S.recording || PB.playing) return;     /* 再生中の音は録らない */
   S.events.push({t:Math.round(performance.now()-S.recT0), ...e});
 }
 function startRec(){
@@ -675,7 +667,7 @@ function refreshTakes(){
     ? S.takes.map(t=>`<option value="${t.id}"${t.id===S.curId?' selected':''}>${t.name}</option>`).join('')
     : '<option value="">録音なし</option>';
   const none=!S.takes.length;
-  for(const id of ['btnMid','btnJson','btnDel','btnZoomOut']) $(id).disabled=none;
+  for(const id of ['btnMid','btnJson','btnDel','btnZoomOut','btnPlay']) $(id).disabled=none;
 }
 
 /* =======================================================================
@@ -823,6 +815,7 @@ function drawCharts(){
     svg.innerHTML=chartBody(ch,g);
     ch.g=g; ch.svg=svg; ch.el=el;
   }
+  setPlayhead(PB.playing?PB.pos:(seekPos>0?seekPos:null));
 }
 function chartBody(ch,g){
   const A=ch.A, {t0,t1}=viewRange(A);
@@ -887,7 +880,20 @@ function chartBody(ch,g){
   /* カーソルと選択範囲（あとで動かす） */
   s+=`<rect class="sel" x="0" y="${g.T}" width="0" height="${(g.h-g.B-g.T).toFixed(1)}" fill="var(--accent)" opacity="0.12" style="display:none"/>`;
   s+=`<line class="cur" x1="0" y1="${g.T}" x2="0" y2="${(g.h-g.B).toFixed(1)}" stroke="var(--accent)" stroke-width="1" opacity="0.8" style="display:none"/>`;
+  s+=`<line class="ph" x1="0" y1="${g.T}" x2="0" y2="${(g.h-g.B).toFixed(1)}" stroke="var(--ped)" stroke-width="1.5" style="display:none"/>`;
   return s;
+}
+
+/* 再生位置の線。表示範囲の外に出たら隠す */
+function setPlayhead(t){
+  for(const ch of CHARTS){
+    const l=ch.svg.querySelector('.ph'); if(!l) continue;
+    if(t==null){ l.style.display='none'; continue; }
+    const g=ch.g, {t0,t1}=viewRange(ch.A);
+    if(t<t0||t>t1){ l.style.display='none'; continue; }
+    const x=(g.L+(t-t0)/(t1-t0)*(g.w-g.L-g.R)).toFixed(1);
+    l.style.display=''; l.setAttribute('x1',x); l.setAttribute('x2',x);
+  }
 }
 
 function wireCharts(){
@@ -951,11 +957,190 @@ function wireCharts(){
     const a=Math.min(drag.t0,drag.t1??drag.t0), b=Math.max(drag.t0,drag.t1??drag.t0);
     drag=null;
     for(const c of CHARTS) c.svg.querySelector('.sel').style.display='none';
-    if(b-a>250){ S.view={t0:a,t1:b}; drawCharts(); }
+    if(b-a>250){ S.view={t0:a,t1:b}; drawCharts(); return; }
+    /* ドラッグでなくクリックなら、そこを再生開始位置にする */
+    seekPos=a;
+    if(PB.playing){ stopPlay(true); startPlay(seekPos); }
+    else setPlayhead(seekPos);
   });
   box.addEventListener('dblclick',()=>{ S.view=null; drawCharts(); });
 }
 addEventListener('resize',()=>{ if(CHARTS.length) drawCharts(); });
+
+/* =======================================================================
+   再生
+   出力先は2つ。ひとつは電子ピアノ本体（MIDI出力に送り返す。ピアノ自身の音で
+   鳴るので、いちばん実物に近い）。もうひとつはブラウザ内蔵の簡易音。
+   送信は先読みして時刻つきで渡し、画面はそれとは別に追いかける。
+   ======================================================================= */
+const LOOKAHEAD=250;                       /* ms。これだけ先まで送っておく */
+let seekPos=0;                             /* グラフをクリックして決めた再生開始位置 */
+const PB={
+  playing:false, startAt:0, offset:0,      /* offset = 再生開始位置(ms) */
+  sendIdx:0, dispIdx:0, damper:0,
+  timer:null, raf:null, out:null,          /* out=null なら内蔵音 */
+  onNotes:new Set(),                       /* 消し忘れ防止に、鳴らした音を控える */
+  pos:0,
+};
+const pbElapsed = () => PB.offset + (performance.now()-PB.startAt);
+
+/* ---- 内蔵音（ピアノらしい減衰を持たせただけの簡単なもの） ---- */
+let AC=null;
+const voices=new Map();                    /* note -> [voice] */
+const sustained=new Set();                 /* ペダルで残している voice */
+function ac(){ if(!AC) AC=new (window.AudioContext||window.webkitAudioContext)(); return AC; }
+function synthOn(note,vel,when){
+  const c=ac(), t=Math.max(when, c.currentTime);
+  const f=440*Math.pow(2,(note-69)/12);
+  const amp=0.16*Math.pow(clamp(vel/127,0,1),1.6);
+  const dec=clamp(1.4+2000/f, 1.2, 9);     /* 低い音ほど長く残る */
+  const g=c.createGain(), lp=c.createBiquadFilter();
+  lp.type='lowpass'; lp.frequency.value=clamp(f*6,800,9000);
+  g.gain.setValueAtTime(0.0001,t);
+  g.gain.exponentialRampToValueAtTime(Math.max(amp,0.0002), t+0.006);
+  g.gain.exponentialRampToValueAtTime(0.0001, t+dec);
+  const oscs=[[1,1],[2,0.32],[3,0.10],[4,0.05]].map(([h,a])=>{
+    const o=c.createOscillator(), og=c.createGain();
+    o.type = h===1?'triangle':'sine';
+    o.frequency.value=f*h; og.gain.value=a;
+    o.connect(og).connect(lp); o.start(t); o.stop(t+dec+0.3);
+    return o;
+  });
+  lp.connect(g).connect(c.destination);
+  const v={g,oscs,end:t+dec+0.3};
+  if(!voices.has(note)) voices.set(note,[]);
+  voices.get(note).push(v);
+  return v;
+}
+function synthOff(note,when){
+  const c=ac(), t=Math.max(when, c.currentTime), list=voices.get(note);
+  if(!list) return;
+  for(const v of list){
+    try{ v.g.gain.cancelScheduledValues(t); v.g.gain.setValueAtTime(Math.max(v.g.gain.value,0.0001),t);
+         v.g.gain.exponentialRampToValueAtTime(0.0001, t+0.14); }catch(e){}
+    for(const o of v.oscs){ try{ o.stop(t+0.2); }catch(e){} }
+  }
+  voices.delete(note);
+}
+function synthAllOff(){
+  for(const n of [...voices.keys()]) synthOff(n, 0);
+  voices.clear(); sustained.clear();
+}
+
+/* ---- 出力先 ---- */
+function refreshOutputs(){
+  const sel=$('outSel'), prev=sel.value;
+  const opts=['<option value="">内蔵音（このデバイス）</option>'];
+  if(midi) for(const o of midi.outputs.values()) opts.push(`<option value="${o.id}">${o.name} に送る</option>`);
+  sel.innerHTML=opts.join('');
+  /* ピアノがつながっていれば、初期値はピアノ側にする */
+  if(prev && [...sel.options].some(o=>o.value===prev)) sel.value=prev;
+  else if(sel.options.length>1) sel.selectedIndex=1;
+}
+const outputPort = () => {
+  const id=$('outSel').value;
+  if(!id||!midi) return null;
+  for(const o of midi.outputs.values()) if(o.id===id) return o;
+  return null;
+};
+
+/* ---- 送信 ---- */
+function pbSend(e, when){
+  if(PB.out){
+    if(e.k==='on'){ PB.out.send([0x90,e.a,e.b],when); PB.onNotes.add(e.a); }
+    else if(e.k==='off'){ PB.out.send([0x80,e.a,0x40],when); PB.onNotes.delete(e.a); }
+    else PB.out.send([0xB0,e.a,e.b],when);
+    return;
+  }
+  /* 内蔵音。ペダルを踏んでいる間の離鍵は消さず、離した時点でまとめて消す */
+  const c=ac(), at=c.currentTime+(when-performance.now())/1000;
+  if(e.k==='on'){ synthOn(e.a,e.b,at); sustained.delete(e.a); }
+  else if(e.k==='off'){ if(PB.damper>=64) sustained.add(e.a); else synthOff(e.a,at); }
+  else if(e.k==='cc' && e.a===64 && e.b<64){
+    for(const n of sustained) synthOff(n,at);
+    sustained.clear();
+  }
+}
+function pbTickSend(){
+  const take=curTake(); if(!take||!PB.playing) return;
+  const ev=take.events, horizon=pbElapsed()+LOOKAHEAD;
+  while(PB.sendIdx<ev.length && ev[PB.sendIdx].t<=horizon){
+    const e=ev[PB.sendIdx++];
+    const when=PB.startAt+(e.t-PB.offset);
+    if(e.k==='cc'&&e.a===64) { pbSend(e,when); PB.damper=e.b; }
+    else pbSend(e,when);
+  }
+}
+/* 画面をいまの再生位置まで進める。何度呼んでも同じところで止まる */
+function pbAdvance(){
+  if(!PB.playing) return;
+  const take=curTake(); if(!take){ stopPlay(); return; }
+  const ev=take.events, now=pbElapsed();
+  while(PB.dispIdx<ev.length && ev[PB.dispIdx].t<=now){
+    const e=ev[PB.dispIdx++];
+    if(e.k==='on') noteOn(e.a,e.b);
+    else if(e.k==='off') noteOff(e.a);
+    else controlPedal(e.a,e.b);
+  }
+  PB.pos=now;
+  setPlayhead(Math.min(now,take.dur));
+  $('recStat').textContent=`再生中 ${fmtTime(now)} / ${fmtTime(take.dur)}`;
+  $('recStat').className='stat ok';
+  if(now>=take.dur+200) stopPlay();
+}
+/* なめらかさは rAF に任せるが、裏のタブなどで rAF が止まっても
+   終わりを見落とさないよう、送信のタイマー側でも同じ処理を回す */
+function pbTickDisplay(){
+  if(!PB.playing) return;
+  pbAdvance();
+  if(PB.playing) PB.raf=requestAnimationFrame(pbTickDisplay);
+}
+function startPlay(from){
+  const take=curTake(); if(!take||S.recording) return;
+  stopPlay(true);
+  PB.out=outputPort();
+  if(!PB.out){ try{ ac().resume(); }catch(e){} }
+  panic();
+  PB.playing=true;
+  PB.offset=clamp(from||0, 0, Math.max(0,take.dur-50));
+  PB.startAt=performance.now();
+  PB.damper=0; PB.onNotes.clear();
+  /* 途中から鳴らすときは、そこまでのペダルの状態を先に作っておく */
+  const ev=take.events;
+  let i=0; while(i<ev.length && ev[i].t<PB.offset) i++;
+  PB.sendIdx=i; PB.dispIdx=i;
+  for(let j=0;j<i;j++) if(ev[j].k==='cc'&&ev[j].a===64) PB.damper=ev[j].b;
+  if(PB.damper>0) pbSend({k:'cc',a:64,b:PB.damper}, performance.now());
+  $('btnPlay').textContent='■ 停止';
+  $('btnRec').disabled=true;
+  pbTickSend();
+  PB.timer=setInterval(()=>{ pbTickSend(); pbAdvance(); },60);
+  PB.raf=requestAnimationFrame(pbTickDisplay);
+}
+function stopPlay(quiet){
+  if(PB.timer) clearInterval(PB.timer);
+  if(PB.raf) cancelAnimationFrame(PB.raf);
+  PB.timer=PB.raf=null;
+  const was=PB.playing;
+  PB.playing=false;
+  if(PB.out){
+    /* 先に送ってある予定を取り消し、鳴りっぱなしを確実に止める。
+       CC123 を無視する機種があるので、88鍵ぶんのノートオフも送る */
+    try{ PB.out.clear&&PB.out.clear(); }catch(e){}
+    try{
+      PB.out.send([0xB0,64,0]); PB.out.send([0xB0,66,0]);
+      for(let n=KB_LO;n<=KB_HI;n++) PB.out.send([0x80,n,0x40]);
+      PB.out.send([0xB0,123,0]);
+    }catch(e){}
+  }
+  PB.onNotes.clear();
+  synthAllOff();
+  PB.out=null;
+  if(was){ panic(); setPlayhead(seekPos>0?seekPos:null); }
+  $('btnPlay').textContent='▶ 再生';
+  $('btnRec').disabled=false;
+  if(was&&!quiet){ $('recStat').textContent='待機中'; $('recStat').className='stat'; }
+}
 
 /* =======================================================================
    書き出し（SMF format 0）
@@ -1043,8 +1228,10 @@ $('optChord').addEventListener('change',e=>{ S.showChord=e.target.checked; saveO
 $('optNames').addEventListener('change',e=>{ S.showNames=e.target.checked; saveOpts(); renderLive(); });
 $('btnPanic').addEventListener('click',panic);
 
-$('btnRec').addEventListener('click',()=>{ S.recording?stopRec():startRec(); });
-$('takeSel').addEventListener('change',e=>{ S.curId=e.target.value; S.view=null; renderTake(); });
+$('btnRec').addEventListener('click',()=>{ if(PB.playing) stopPlay(); S.recording?stopRec():startRec(); });
+$('btnPlay').addEventListener('click',()=>{ PB.playing?stopPlay():startPlay(seekPos); });
+$('outSel').addEventListener('change',()=>{ if(PB.playing){ const p=PB.pos; stopPlay(true); startPlay(p); } });
+$('takeSel').addEventListener('change',e=>{ stopPlay(); S.curId=e.target.value; S.view=null; seekPos=0; renderTake(); });
 $('btnMid').addEventListener('click',()=>{ const t=curTake(); if(t) download(safeName(t)+'.mid',new Blob([toSMF(t)],{type:'audio/midi'})); });
 $('btnJson').addEventListener('click',()=>{ const t=curTake(); if(!t) return;
   download(safeName(t)+'.json',new Blob([JSON.stringify({name:t.name,dur:t.dur,events:t.events},null,1)],{type:'application/json'})); });
@@ -1052,8 +1239,9 @@ $('btnZoomOut').addEventListener('click',()=>{ S.view=null; if(CHARTS.length) dr
 $('btnDel').addEventListener('click',()=>{
   const t=curTake(); if(!t) return;
   if(!confirm(`「${t.name}」を削除します。よろしいですか？`)) return;
+  stopPlay();
   S.takes=S.takes.filter(x=>x.id!==t.id);
-  S.curId=S.takes.length?S.takes[0].id:null; S.view=null;
+  S.curId=S.takes.length?S.takes[0].id:null; S.view=null; seekPos=0;
   saveTakes(); refreshTakes(); renderTake();
 });
 
@@ -1061,6 +1249,7 @@ if(!navigator.requestMIDIAccess){
   setStatus('このブラウザは Web MIDI API に非対応です（iPad は MIDIWeb Browser、Mac は Chrome）','ng');
   $('btnConnect').disabled=true;
 }
+refreshOutputs();
 refreshTakes();
 renderLive();
 renderTake();

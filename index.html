@@ -109,6 +109,7 @@
   .tip .k{color:var(--dim)}
   .empty{color:var(--dim2);font-size:13px;padding:18px 4px}
   .hint{font-size:12px;color:var(--dim2);margin-top:8px;line-height:1.6}
+  .hint a{color:var(--dim)}
   @media (max-width:640px){
     .chord{font-size:26px}
     .wrap{padding:8px 8px 40px}
@@ -175,7 +176,8 @@
     </div>
     <div class="stats" id="stats"></div>
     <div class="charts" id="charts"></div>
-    <div class="hint">グラフは横にドラッグで範囲を拡大、ダブルクリック（または「全体」）で戻ります。クリックした場所が再生の開始位置になります。</div>
+    <div class="hint">グラフは横にドラッグで範囲を拡大、ダブルクリック（または「全体」）で戻ります。クリックした場所が再生の開始位置になります。<br>
+      「内蔵音」は初回だけ約2MBのピアノ音源を読み込みます（<a href="https://github.com/sfzinstruments/SalamanderGrandPiano" target="_blank" rel="noopener">Salamander Grand Piano</a> / Alexander Holm・CC-BY 3.0）。一度読めば次からは通信なしで鳴ります。</div>
   </section>
 
 </div>
@@ -1060,15 +1062,64 @@ const PB={
 const pbElapsed = () => PB.offset + (performance.now()-PB.startAt);
 
 /* ---- 内蔵音 ------------------------------------------------------------
-   ピアノらしさの大半は「高い倍音ほど速く消える」ことで決まる。そこで
-   倍音を3つの群に分け、群ごとに違う減衰をかける。さらに実物に寄せて、
-    ・ハンマーが弦の 1/8 を叩くので 8倍音の付近がへこむ
-    ・1音に複数の弦があり、わずかにずれて「うなり」が出る
-    ・打鍵の瞬間の雑音
-    ・低音の減衰は長く二段階（最初に速く落ちてから、長く残る）
-    ・最高音域（F6 より上）にはダンパーが無く、鍵を離しても鳴り続ける
-    ・部屋の響き（短いリバーブ）
-   を入れている。サンプル音源ではないので本物とは違うが、ピアノには聞こえる。 */
+   本命は「録音したピアノの音」を使うこと。Salamander Grand Piano
+   （Alexander Holm、CC-BY 3.0。ヤマハ C5 を録ったもの）を Tone.js の
+   配布先から、必要になったときだけ取りに行く。3半音おきに30音・約1.9MB。
+   一度読めば Cache API に残るので、次からは通信なしで鳴る。
+   取りに行けなかったときは、下の合成音に落ちる。 */
+const SF_BASE='https://tonejs.github.io/audio/salamander/';
+const SF_NOTES=[[21,'A0'],[24,'C1'],[27,'Ds1'],[30,'Fs1'],[33,'A1'],[36,'C2'],[39,'Ds2'],
+  [42,'Fs2'],[45,'A2'],[48,'C3'],[51,'Ds3'],[54,'Fs3'],[57,'A3'],[60,'C4'],[63,'Ds4'],
+  [66,'Fs4'],[69,'A4'],[72,'C5'],[75,'Ds5'],[78,'Fs5'],[81,'A5'],[84,'C6'],[87,'Ds6'],
+  [90,'Fs6'],[93,'A6'],[96,'C7'],[99,'Ds7'],[102,'Fs7'],[105,'A7'],[108,'C8']];
+const PIANO={state:'none', bufs:new Map(), notes:[]};   /* none / loading / ready / failed */
+
+/* 録音は最長20秒近くあり、そのまま持つとメモリを食う。モノラルにして、
+   音の高さに応じた長さで切る（末尾は短くフェード）。 */
+function trimMono(c, buf, f){
+  const maxDur=clamp(1.5+700/f, 1.5, 12);
+  const n=Math.min(buf.length, Math.floor(maxDur*buf.sampleRate));
+  const out=c.createBuffer(1, n, buf.sampleRate), d=out.getChannelData(0);
+  const L=buf.getChannelData(0), R=buf.numberOfChannels>1?buf.getChannelData(1):L;
+  for(let i=0;i<n;i++) d[i]=(L[i]+R[i])*0.5;
+  const fade=Math.min(2000,n);
+  for(let i=0;i<fade;i++) d[n-fade+i]*=1-i/fade;
+  return out;
+}
+async function loadPiano(onProgress){
+  if(PIANO.state==='ready') return true;
+  if(PIANO.state==='loading') return false;
+  PIANO.state='loading';
+  const c=ac();
+  let cache=null;
+  try{ cache=await caches.open('pm-salamander-v1'); }catch(e){}
+  let done=0;
+  await Promise.all(SF_NOTES.map(async ([n,name])=>{
+    const url=SF_BASE+name+'.mp3';
+    try{
+      let res=null;
+      if(cache) try{ res=await cache.match(url); }catch(e){}
+      if(!res){
+        res=await fetch(url);
+        if(!res.ok) throw new Error('HTTP '+res.status);
+        if(cache) try{ await cache.put(url,res.clone()); }catch(e){}
+      }
+      const raw=await c.decodeAudioData(await res.arrayBuffer());
+      PIANO.bufs.set(n, trimMono(c, raw, 440*Math.pow(2,(n-69)/12)));
+    }catch(e){}
+    if(onProgress) onProgress(++done, SF_NOTES.length);
+  }));
+  PIANO.notes=[...PIANO.bufs.keys()].sort((a,b)=>a-b);
+  PIANO.state = PIANO.bufs.size>=SF_NOTES.length-2 ? 'ready' : 'failed';
+  return PIANO.state==='ready';
+}
+/* いちばん近い録音を選ぶ。3半音おきなので、ずらすのは最大1半音 */
+function nearestSample(note){
+  let best=PIANO.notes[0];
+  for(const n of PIANO.notes) if(Math.abs(n-note)<Math.abs(best-note)) best=n;
+  return best;
+}
+
 let AC=null, MASTER=null, REVSEND=null, WAVES=null;
 const voices=new Map();                    /* note -> [voice] */
 const sustained=new Set();                 /* ペダルで残している音 */
@@ -1113,10 +1164,31 @@ function synthOn(note,vel,when){
   const T1=clamp(1.2+1400/f, 1.1, 8);      /* 低い音ほど長く残る */
   const out=c.createGain(); out.gain.value=1;
   const lp=c.createBiquadFilter();
-  lp.type='lowpass'; lp.frequency.value=clamp(f*(12+12*v), 1600, 15000); lp.Q.value=0.5;   /* 強く弾くほど明るい */
+  lp.type='lowpass'; lp.Q.value=0.5;
   out.connect(lp); lp.connect(MASTER); lp.connect(REVSEND);
-
   const oscs=[];
+
+  /* 録音した音があればそれを鳴らす。強さは音量と明るさの両方で表す
+     （録音は1段階の強さしか無いので、弱い音はローパスで暗くする） */
+  if(PIANO.state==='ready'){
+    const base=nearestSample(note), src=c.createBufferSource(), g=c.createGain();
+    src.buffer=PIANO.bufs.get(base);
+    src.playbackRate.value=Math.pow(2,(note-base)/12);
+    lp.frequency.value=clamp(900*Math.pow(2,4.0*v), 900, 16000);
+    g.gain.setValueAtTime(0.0001,t);
+    g.gain.exponentialRampToValueAtTime(clamp(1.35*Math.pow(v,1.4),0.001,2), t+0.003);
+    src.connect(g); g.connect(out);
+    src.start(t);
+    oscs.push(src);
+    const dur=src.buffer.duration/src.playbackRate.value;
+    const voice={out,oscs,end:t+dur};
+    if(!voices.has(note)) voices.set(note,[]);
+    voices.get(note).push(voice);
+    if(voices.size>140) for(const [n,l] of voices) if(l.every(x=>x.end<c.currentTime)) voices.delete(n);
+    return voice;
+  }
+  lp.frequency.value=clamp(f*(12+12*v), 1600, 15000);   /* 強く弾くほど明るい */
+
   const group=(wave,gain,dec,detune)=>{
     if(gain<0.0004) return;
     const o=c.createOscillator(), g=c.createGain();
@@ -1183,7 +1255,7 @@ function synthAllOff(){
 /* ---- 出力先 ---- */
 function refreshOutputs(){
   const sel=$('outSel'), prev=sel.value;
-  const opts=['<option value="">内蔵音（このデバイス）</option>'];
+  const opts=['<option value="">内蔵音（ピアノ音源）</option>'];
   if(midi) for(const o of midi.outputs.values()) opts.push(`<option value="${o.id}">${o.name} に送る</option>`);
   sel.innerHTML=opts.join('');
   /* ピアノがつながっていれば、初期値はピアノ側にする */
@@ -1248,11 +1320,20 @@ function pbTickDisplay(){
   pbAdvance();
   if(PB.playing) PB.raf=requestAnimationFrame(pbTickDisplay);
 }
-function startPlay(from){
+async function startPlay(from){
   const take=curTake(); if(!take||S.recording) return;
   stopPlay(true);
   PB.out=outputPort();
-  if(!PB.out){ try{ ac().resume(); }catch(e){} }
+  if(!PB.out){
+    try{ ac().resume(); }catch(e){}
+    /* 初回だけ、録音されたピアノの音を取りに行く */
+    if(PIANO.state==='none'){
+      $('btnPlay').disabled=true;
+      await loadPiano((d,n)=>{ $('playStat').textContent=`ピアノ音源を読み込み中… ${d}/${n}`; $('playStat').className='stat'; });
+      $('btnPlay').disabled=false;
+      $('playStat').textContent = PIANO.state==='ready' ? '' : '音源を取得できなかったので合成音で鳴らします';
+    }
+  }
   panic();
   PB.playing=true;
   PB.offset=clamp(from||0, 0, Math.max(0,take.dur-50));
@@ -1382,7 +1463,12 @@ $('btnPanic').addEventListener('click',panic);
 
 $('btnRec').addEventListener('click',()=>{ if(PB.playing) stopPlay(); S.recording?stopRec():startRec(); });
 $('btnPlay').addEventListener('click',()=>{ PB.playing?stopPlay():startPlay(seekPos); });
-$('outSel').addEventListener('change',()=>{ if(PB.playing){ const p=PB.pos; stopPlay(true); startPlay(p); } });
+$('outSel').addEventListener('change',()=>{
+  if(PB.playing){ const p=PB.pos; stopPlay(true); startPlay(p); return; }
+  /* 内蔵音を選んだ時点で、裏で音源を取りに行っておく */
+  if(!$('outSel').value && PIANO.state==='none')
+    loadPiano((d,n)=>{ $('playStat').textContent = d<n?`ピアノ音源を読み込み中… ${d}/${n}`:''; });
+});
 $('takeSel').addEventListener('change',e=>{ stopPlay(); S.curId=e.target.value; S.view=null; seekPos=0; renderTake(); });
 $('btnMid').addEventListener('click',()=>{ const t=curTake(); if(t) download(safeName(t)+'.mid',new Blob([toSMF(t)],{type:'audio/midi'})); });
 $('btnJson').addEventListener('click',()=>{ const t=curTake(); if(!t) return;

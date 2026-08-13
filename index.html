@@ -57,14 +57,20 @@
   .stat{font-size:13px;color:var(--dim)}
   .stat.ok{color:var(--ok)} .stat.ng{color:var(--ng)} .stat.warn{color:var(--warn)}
 
-  /* ---- 上段：楽譜とコード名 ---- */
+  /* ---- 上段：五度圏・楽譜・コード名 ---- */
   .live{display:flex;gap:14px;align-items:flex-start;flex-wrap:wrap;margin:10px 0 12px}
+  .wheelBox{flex:0 0 auto;width:268px;max-width:100%}
+  .wheelBox svg{display:block;width:100%;height:auto;touch-action:manipulation}
+  .wheelBox svg .sec{cursor:pointer}
+  .wheelBox svg .sec:hover .bg{fill:#31384a}
+  .wheelCap{text-align:center;font-size:13px;color:var(--dim);margin-top:2px}
+  .wheelCap b{color:var(--fg);font-size:15px;font-weight:600}
   .staffBox{
     background:var(--paper);border-radius:10px;padding:6px 4px;flex:0 0 auto;
-    width:min(430px,100%);
+    width:min(312px,100%);
   }
   .staffBox svg{display:block;width:100%;height:auto}
-  .readout{flex:1 1 220px;min-width:200px;display:flex;flex-direction:column;gap:10px}
+  .readout{flex:1 1 220px;min-width:200px;max-width:400px;display:flex;flex-direction:column;gap:10px}
   .chord{font-size:34px;font-weight:600;letter-spacing:.01em;line-height:1.1;min-height:38px}
   .chord .sm{font-size:20px;color:var(--dim);font-weight:400;margin-left:6px}
   .notes{font-size:14px;color:var(--dim);min-height:22px;word-break:break-all}
@@ -123,7 +129,6 @@
 
   <section class="panel">
     <div class="row">
-      <label class="fld">調 <select id="keySel"></select></label>
       <label class="chk"><input type="checkbox" id="optPedal" checked>ペダルで音を保持</label>
       <label class="chk"><input type="checkbox" id="optChord" checked>コード名</label>
       <label class="chk"><input type="checkbox" id="optNames" checked>音名</label>
@@ -131,7 +136,11 @@
     </div>
 
     <div class="live">
-      <div class="staffBox"><svg id="staff" viewBox="0 49 430 190" aria-label="いま鳴っている音"></svg></div>
+      <div class="wheelBox">
+        <svg id="wheel" viewBox="0 0 268 268" aria-label="調の選択（五度圏）"></svg>
+        <div class="wheelCap" id="keyCap">&nbsp;</div>
+      </div>
+      <div class="staffBox"><svg id="staff" aria-label="いま鳴っている音"></svg></div>
       <div class="readout">
         <div class="chord" id="chordName">&nbsp;</div>
         <div class="notes" id="noteList">&nbsp;</div>
@@ -144,14 +153,21 @@
   </section>
 
   <section class="panel">
-    <h2>録音とふりかえり</h2>
+    <h2>録音</h2>
     <div class="row">
       <button id="btnRec" class="rec">● 録音開始</button>
       <span id="recStat" class="stat">待機中</span>
-      <span style="flex:1 1 auto"></span>
-      <button id="btnPlay">▶ 再生</button>
-      <select id="outSel" title="再生の出力先"></select>
+    </div>
+  </section>
+
+  <section class="panel">
+    <h2>ふりかえり</h2>
+    <div class="row">
       <select id="takeSel" title="録音の一覧"></select>
+      <button id="btnPlay">▶ 再生</button>
+      <label class="fld">出力 <select id="outSel" title="再生の出力先"></select></label>
+      <span id="playStat" class="stat"></span>
+      <span style="flex:1 1 auto"></span>
       <button id="btnMid">.mid</button>
       <button id="btnJson">.json</button>
       <button id="btnZoomOut" title="グラフの表示範囲を全体に戻す">全体</button>
@@ -159,7 +175,7 @@
     </div>
     <div class="stats" id="stats"></div>
     <div class="charts" id="charts"></div>
-    <div class="hint">グラフは横にドラッグで範囲を拡大、ダブルクリック（または「全体」）で戻ります。</div>
+    <div class="hint">グラフは横にドラッグで範囲を拡大、ダブルクリック（または「全体」）で戻ります。クリックした場所が再生の開始位置になります。</div>
   </section>
 
 </div>
@@ -220,6 +236,61 @@ function spell(n, center){
 }
 const noteName = (n,center) => { const s=spell(n,center); return s.letter+ACC_CHAR[s.alter]; };
 const noteNameOct = (n,center) => { const s=spell(n,center); return s.letter+ACC_CHAR[s.alter]+s.oct; };
+
+/* =======================================================================
+   五度圏（調の選択）
+   12方向に長調（外）と平行調の短調（内）を置く。同じ位置に2通りの綴りが
+   あるところ（B/C♭、F♯/G♭、D♭/C♯）は、♯♭の多いほうを輪の外と内へ
+   はみ出させる。輪の中は必ず記号の少ないほうになる。
+   ======================================================================= */
+/* 内→外：短調のはみ出し／短調／境／長調／長調のはみ出し。
+   内側は同じ角度でも弧が短くなるので、字が入るだけの半径を確保する */
+const WHEEL_R=[44,63,88,112,131];
+const WHEEL_C=134;
+const isBump = sig => sig===7||sig===-6||sig===-7;
+function wheelCells(){
+  return KEYS.map((k,i)=>{
+    const maj=i<15, p=mod(k.sig,12), b=isBump(k.sig);
+    const r = maj ? (b?[WHEEL_R[3],WHEEL_R[4]]:[WHEEL_R[2],WHEEL_R[3]])
+                  : (b?[WHEEL_R[0],WHEEL_R[1]]:[WHEEL_R[1],WHEEL_R[2]]);
+    /* 輪の中の短音名は「Am」の形。長調は音名そのまま */
+    const short = maj ? k.label.split(' ')[0] : k.label.split(' ')[0]+'m';
+    return {i,p,r0:r[0],r1:r[1],bump:b,maj,short,label:k.label,sig:k.sig};
+  });
+}
+const WCELLS=wheelCells();
+function arcPath(p,r0,r1){
+  const a0=(-90+30*p-15)*Math.PI/180, a1=(-90+30*p+15)*Math.PI/180;
+  const P=(r,a)=>`${(WHEEL_C+r*Math.cos(a)).toFixed(2)} ${(WHEEL_C+r*Math.sin(a)).toFixed(2)}`;
+  return `M ${P(r0,a0)} L ${P(r1,a0)} A ${r1} ${r1} 0 0 1 ${P(r1,a1)} L ${P(r0,a1)} A ${r0} ${r0} 0 0 0 ${P(r0,a0)} Z`;
+}
+function drawWheel(){
+  const cur=S.keyIdx;
+  let s='';
+  for(const c of WCELLS){
+    const on=c.i===cur;
+    const a=(-90+30*c.p)*Math.PI/180, rm=(c.r0+c.r1)/2;
+    const tx=WHEEL_C+rm*Math.cos(a), ty=WHEEL_C+rm*Math.sin(a);
+    const fill=on?'var(--accent)':(c.bump?'#1e2230':'var(--panel2)');
+    const fs=c.bump?9:(c.maj?12.5:10.5);
+    s+=`<g class="sec" data-k="${c.i}"><title>${c.label}</title>`
+      +`<path class="bg" d="${arcPath(c.p,c.r0,c.r1)}" fill="${fill}" stroke="var(--line)" stroke-width="1"/>`
+      +`<text x="${tx.toFixed(1)}" y="${ty.toFixed(1)}" text-anchor="middle" dominant-baseline="central" `
+      +`font-size="${fs}" font-weight="${on?700:c.maj?600:400}" `
+      +`fill="${on?'#06202c':(c.bump?'var(--dim)':c.maj?'var(--fg)':'var(--dim)')}">${c.short}</text></g>`;
+  }
+  /* まん中に、いま選んでいる調号 */
+  const sig=keySig();
+  const mark = sig===0 ? '♮' : `${Math.abs(sig)}${sig>0?'♯':'♭'}`;
+  s+=`<circle cx="${WHEEL_C}" cy="${WHEEL_C}" r="${WHEEL_R[0]-3}" fill="var(--panel)" stroke="var(--line)"/>`;
+  s+=`<text x="${WHEEL_C}" y="${WHEEL_C-6}" text-anchor="middle" dominant-baseline="central" `
+    +`font-size="21" font-weight="600" fill="var(--accent)">${mark}</text>`;
+  s+=`<text x="${WHEEL_C}" y="${WHEEL_C+13}" text-anchor="middle" dominant-baseline="central" `
+    +`font-size="9.5" fill="var(--dim2)">調号</text>`;
+  $('wheel').innerHTML=s;
+  const k=KEYS[S.keyIdx];
+  $('keyCap').innerHTML=`<b>${k.label}</b>　`+(k.sig===0?'調号なし':`${Math.abs(k.sig)}つの${k.sig>0?'♯':'♭'}`);
+}
 
 /* =======================================================================
    状態
@@ -392,9 +463,20 @@ function drawKeyboard(){
 const SP=9, HS=SP/2;              /* 五線の間隔と、その半分（＝1段） */
 const TREB_E4_Y=126;              /* 高音部譜表の下線 E4 */
 const BASS_G2_Y=198;              /* 低音部譜表の下線 G2 */
-const STAFF_X0=14, STAFF_X1=416;
+const STAFF_X0=14, STAFF_X1=300;
 const yTreble = step => TREB_E4_Y-(step-30)*HS;
 const yBass   = step => BASS_G2_Y-(step-18)*HS;
+/* 表示範囲は固定。どの調でも 88鍵の両端（A0・C8）が最初から収まる高さにして
+   おく。音域で枠が伸び縮みすると、弾いている最中に譜面が動いて読みにくい。 */
+const STAFF_VB=(()=>{
+  let top=Infinity, bot=-Infinity;
+  for(const k of KEYS){
+    top=Math.min(top, yTreble(spell(KB_HI,k.center).step));
+    bot=Math.max(bot, yBass(spell(KB_LO,k.center).step));
+  }
+  top-=1.7*SP; bot+=1.7*SP;
+  return {top, h:bot-top, w:STAFF_X1+12};
+})();
 
 /* --- 記号の字形 ------------------------------------------------------------
    音部記号などは Bravura（MuseScore 同梱、SIL OFL 1.1）の輪郭を必要な字だけ
@@ -500,14 +582,11 @@ function drawStaff(){
   }
 
   /* 音符 */
-  let yLo=Infinity, yHi=-Infinity;
   const drawSide=(res,st)=>{
     const yOf = st==='t'?yTreble:yBass;
     const inner = st==='t'?[30,38]:[18,26];
     for(const o of res.list){
       const y=yOf(o.step), x=NOTE_X+(o.shift?NHW:0);
-      if(y<yLo) yLo=y;
-      if(y>yHi) yHi=y;
       /* 加線 */
       const from = o.step>inner[1] ? inner[1]+2 : (o.step<inner[0] ? inner[0]-2 : null);
       if(from!==null){
@@ -524,10 +603,6 @@ function drawStaff(){
     }
   };
   drawSide(T,'t'); drawSide(B,'b');
-  /* 表示範囲。ふだんは A1〜D6 あたりが収まる高さで固定し、それを超える音が
-     鳴ったときだけ縦に広げる（加線が切れないように） */
-  const top=Math.min(yTreble(44)-14, yLo-14), bot=Math.max(yBass(12)+14, yHi+14);
-  $('staff').setAttribute('viewBox',`0 ${top.toFixed(1)} 430 ${(bot-top).toFixed(1)}`);
   $('staff').innerHTML=s;
 }
 
@@ -984,46 +1059,124 @@ const PB={
 };
 const pbElapsed = () => PB.offset + (performance.now()-PB.startAt);
 
-/* ---- 内蔵音（ピアノらしい減衰を持たせただけの簡単なもの） ---- */
-let AC=null;
+/* ---- 内蔵音 ------------------------------------------------------------
+   ピアノらしさの大半は「高い倍音ほど速く消える」ことで決まる。そこで
+   倍音を3つの群に分け、群ごとに違う減衰をかける。さらに実物に寄せて、
+    ・ハンマーが弦の 1/8 を叩くので 8倍音の付近がへこむ
+    ・1音に複数の弦があり、わずかにずれて「うなり」が出る
+    ・打鍵の瞬間の雑音
+    ・低音の減衰は長く二段階（最初に速く落ちてから、長く残る）
+    ・最高音域（F6 より上）にはダンパーが無く、鍵を離しても鳴り続ける
+    ・部屋の響き（短いリバーブ）
+   を入れている。サンプル音源ではないので本物とは違うが、ピアノには聞こえる。 */
+let AC=null, MASTER=null, REVSEND=null, WAVES=null;
 const voices=new Map();                    /* note -> [voice] */
-const sustained=new Set();                 /* ペダルで残している voice */
-function ac(){ if(!AC) AC=new (window.AudioContext||window.webkitAudioContext)(); return AC; }
+const sustained=new Set();                 /* ペダルで残している音 */
+const NO_DAMPER=89;                        /* これ以上の音にはダンパーが無い */
+
+function makeIR(c,dur,decay){
+  const n=Math.floor(c.sampleRate*dur), b=c.createBuffer(2,n,c.sampleRate);
+  for(let ch=0;ch<2;ch++){
+    const d=b.getChannelData(ch);
+    for(let i=0;i<n;i++) d[i]=(Math.random()*2-1)*Math.pow(1-i/n,decay);
+  }
+  return b;
+}
+/* 倍音の群。n番目の倍音の大きさは n^-1.1 に、ハンマー位置によるへこみを掛ける */
+function makeWaves(c){
+  const amp=n=>Math.pow(n,-1.1)*Math.abs(Math.sin(n*Math.PI/8.2));
+  const mk=(from,to)=>{
+    const re=new Float32Array(to+1), im=new Float32Array(to+1);
+    for(let n=from;n<=to;n++) im[n]=amp(n);
+    return c.createPeriodicWave(re,im,{disableNormalization:true});
+  };
+  return [mk(1,4), mk(5,10), mk(11,20)];
+}
+function ac(){
+  if(AC) return AC;
+  AC=new (window.AudioContext||window.webkitAudioContext)();
+  /* 和音とペダルで音が積み重なると簡単に振り切れるので、最後に軽く抑える */
+  const comp=AC.createDynamicsCompressor();
+  comp.threshold.value=-14; comp.knee.value=12; comp.ratio.value=8;
+  comp.attack.value=0.003; comp.release.value=0.25;
+  comp.connect(AC.destination);
+  MASTER=AC.createGain(); MASTER.gain.value=0.85; MASTER.connect(comp);
+  const rev=AC.createConvolver(); rev.buffer=makeIR(AC,1.5,2.6);
+  REVSEND=AC.createGain(); REVSEND.gain.value=0.16;
+  REVSEND.connect(rev); rev.connect(MASTER);
+  WAVES=makeWaves(AC);
+  return AC;
+}
 function synthOn(note,vel,when){
   const c=ac(), t=Math.max(when, c.currentTime);
-  const f=440*Math.pow(2,(note-69)/12);
-  const amp=0.16*Math.pow(clamp(vel/127,0,1),1.6);
-  const dec=clamp(1.4+2000/f, 1.2, 9);     /* 低い音ほど長く残る */
-  const g=c.createGain(), lp=c.createBiquadFilter();
-  lp.type='lowpass'; lp.frequency.value=clamp(f*6,800,9000);
-  g.gain.setValueAtTime(0.0001,t);
-  g.gain.exponentialRampToValueAtTime(Math.max(amp,0.0002), t+0.006);
-  g.gain.exponentialRampToValueAtTime(0.0001, t+dec);
-  const oscs=[[1,1],[2,0.32],[3,0.10],[4,0.05]].map(([h,a])=>{
-    const o=c.createOscillator(), og=c.createGain();
-    o.type = h===1?'triangle':'sine';
-    o.frequency.value=f*h; og.gain.value=a;
-    o.connect(og).connect(lp); o.start(t); o.stop(t+dec+0.3);
-    return o;
-  });
-  lp.connect(g).connect(c.destination);
-  const v={g,oscs,end:t+dec+0.3};
+  const f=440*Math.pow(2,(note-69)/12), v=clamp(vel/127,0.02,1);
+  const T1=clamp(1.2+1400/f, 1.1, 8);      /* 低い音ほど長く残る */
+  const out=c.createGain(); out.gain.value=1;
+  const lp=c.createBiquadFilter();
+  lp.type='lowpass'; lp.frequency.value=clamp(f*(12+12*v), 1600, 15000); lp.Q.value=0.5;   /* 強く弾くほど明るい */
+  out.connect(lp); lp.connect(MASTER); lp.connect(REVSEND);
+
+  const oscs=[];
+  const group=(wave,gain,dec,detune)=>{
+    if(gain<0.0004) return;
+    const o=c.createOscillator(), g=c.createGain();
+    o.setPeriodicWave(wave); o.frequency.value=f; if(detune) o.detune.value=detune;
+    g.gain.setValueAtTime(0.0001,t);
+    g.gain.exponentialRampToValueAtTime(gain, t+0.004);
+    if(dec>2){                              /* 低め・長めの音は二段階で落とす */
+      g.gain.exponentialRampToValueAtTime(gain*0.30, t+0.45);
+      g.gain.exponentialRampToValueAtTime(0.00008, t+dec);
+    }else g.gain.exponentialRampToValueAtTime(0.00008, t+dec);
+    o.connect(g); g.connect(out);
+    o.start(t); o.stop(t+dec+0.1);
+    oscs.push(o);
+  };
+  /* 強く弾くほど上の倍音が増える（音量だけでなく音色が変わる） */
+  const A=0.10*Math.pow(v,1.15);
+  group(WAVES[0], A*0.58, T1,  -1.4);       /* 弦を2本に分けてうならせる */
+  group(WAVES[0], A*0.50, T1,  +1.4);   /* 2本の弦。少し量を変えて、うなりで消えきらないようにする */
+  group(WAVES[1], A*1.00*Math.pow(v,1.1), T1*0.36, 0);
+  group(WAVES[2], A*0.75*Math.pow(v,1.6), T1*0.22, 0);
+  /* 打鍵の雑音 */
+  const nb=c.createBuffer(1,Math.ceil(c.sampleRate*0.03),c.sampleRate), nd=nb.getChannelData(0);
+  for(let i=0;i<nd.length;i++) nd[i]=(Math.random()*2-1)*Math.pow(1-i/nd.length,3);
+  const ns=c.createBufferSource(), nf=c.createBiquadFilter(), ng=c.createGain();
+  ns.buffer=nb; nf.type='bandpass'; nf.frequency.value=clamp(f*5,600,6000); nf.Q.value=0.8;
+  ng.gain.value=0.035*Math.pow(v,2.2);
+  ns.connect(nf).connect(ng).connect(out); ns.start(t);
+
+  const voice={out,oscs,end:t+T1+0.2};
   if(!voices.has(note)) voices.set(note,[]);
-  voices.get(note).push(v);
-  return v;
+  voices.get(note).push(voice);
+  /* 古い音が溜まりすぎないよう、終わったものは捨てる */
+  if(voices.size>140) for(const [n,l] of voices) if(l.every(x=>x.end<c.currentTime)) voices.delete(n);
+  return voice;
 }
 function synthOff(note,when){
+  if(note>=NO_DAMPER) return;               /* ダンパーが無い音域は止まらない */
   const c=ac(), t=Math.max(when, c.currentTime), list=voices.get(note);
   if(!list) return;
+  const f=440*Math.pow(2,(note-69)/12);
+  const rel=clamp(0.07+30/f, 0.07, 0.32);   /* 低音のダンパーはゆっくり効く */
   for(const v of list){
-    try{ v.g.gain.cancelScheduledValues(t); v.g.gain.setValueAtTime(Math.max(v.g.gain.value,0.0001),t);
-         v.g.gain.exponentialRampToValueAtTime(0.0001, t+0.14); }catch(e){}
-    for(const o of v.oscs){ try{ o.stop(t+0.2); }catch(e){} }
+    try{
+      v.out.gain.cancelScheduledValues(t);
+      v.out.gain.setValueAtTime(v.out.gain.value,t);
+      v.out.gain.exponentialRampToValueAtTime(0.0001, t+rel);
+    }catch(e){}
+    for(const o of v.oscs){ try{ o.stop(t+rel+0.05); }catch(e){} }
   }
   voices.delete(note);
 }
 function synthAllOff(){
-  for(const n of [...voices.keys()]) synthOff(n, 0);
+  const t=AC?AC.currentTime:0;
+  for(const [n,list] of voices){
+    for(const v of list){
+      try{ v.out.gain.cancelScheduledValues(t); v.out.gain.setValueAtTime(v.out.gain.value,t);
+           v.out.gain.exponentialRampToValueAtTime(0.0001,t+0.08); }catch(e){}
+      for(const o of v.oscs){ try{ o.stop(t+0.12); }catch(e){} }
+    }
+  }
   voices.clear(); sustained.clear();
 }
 
@@ -1084,8 +1237,8 @@ function pbAdvance(){
   }
   PB.pos=now;
   setPlayhead(Math.min(now,take.dur));
-  $('recStat').textContent=`再生中 ${fmtTime(now)} / ${fmtTime(take.dur)}`;
-  $('recStat').className='stat ok';
+  $("playStat").textContent=`再生中 ${fmtTime(now)} / ${fmtTime(take.dur)}`;
+  $("playStat").className="stat ok";
   if(now>=take.dur+200) stopPlay();
 }
 /* なめらかさは rAF に任せるが、裏のタブなどで rAF が止まっても
@@ -1139,7 +1292,7 @@ function stopPlay(quiet){
   if(was){ panic(); setPlayhead(seekPos>0?seekPos:null); }
   $('btnPlay').textContent='▶ 再生';
   $('btnRec').disabled=false;
-  if(was&&!quiet){ $('recStat').textContent='待機中'; $('recStat').className='stat'; }
+  if(was&&!quiet){ $("playStat").textContent=""; }
 }
 
 /* =======================================================================
@@ -1213,16 +1366,15 @@ function loadTakes(){
    ======================================================================= */
 loadOpts(); loadTakes();
 
-$('keySel').innerHTML =
-  `<optgroup label="長調">${KEYS.slice(0,15).map((k,i)=>`<option value="${i}">${k.label}</option>`).join('')}</optgroup>`
-+ `<optgroup label="短調">${KEYS.slice(15).map((k,i)=>`<option value="${i+15}">${k.label}</option>`).join('')}</optgroup>`;
-$('keySel').value=S.keyIdx;
 $('optPedal').checked=S.pedalHold;
 $('optChord').checked=S.showChord;
 $('optNames').checked=S.showNames;
 
 $('btnConnect').addEventListener('click',connectMidi);
-$('keySel').addEventListener('change',e=>{ S.keyIdx=+e.target.value; saveOpts(); renderLive(); });
+$('wheel').addEventListener('click',ev=>{
+  const g=ev.target.closest('.sec'); if(!g) return;
+  S.keyIdx=+g.dataset.k; saveOpts(); drawWheel(); renderLive();
+});
 $('optPedal').addEventListener('change',e=>{ S.pedalHold=e.target.checked; saveOpts(); renderLive(); });
 $('optChord').addEventListener('change',e=>{ S.showChord=e.target.checked; saveOpts(); renderLive(); });
 $('optNames').addEventListener('change',e=>{ S.showNames=e.target.checked; saveOpts(); renderLive(); });
@@ -1249,8 +1401,10 @@ if(!navigator.requestMIDIAccess){
   setStatus('このブラウザは Web MIDI API に非対応です（iPad は MIDIWeb Browser、Mac は Chrome）','ng');
   $('btnConnect').disabled=true;
 }
+$('staff').setAttribute('viewBox',`0 ${STAFF_VB.top.toFixed(1)} ${STAFF_VB.w} ${STAFF_VB.h.toFixed(1)}`);
 refreshOutputs();
 refreshTakes();
+drawWheel();
 renderLive();
 renderTake();
 </script>

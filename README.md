@@ -2,7 +2,9 @@
 
 電子ピアノをつなぎ、**弾いた音を鍵盤に光らせ、いま鳴っている音を楽譜にし、演奏を録ってあとから眺める**ためのツールです。ブラウザだけで動きます。判定も採点もしません。自分の演奏を見るだけの道具です。
 
-姉妹プロジェクト [コード弾き練習 MIDI Ver.](../chord_practice_midi/) が「弾くべきコードを出して、ちゃんと押せたか見る」のに対し、こちらは**弾いたものをそのまま映す**側です。
+**→ 公開版　https://ku-ron.github.io/piano_monitor/**
+
+姉妹プロジェクト [コード弾き練習 MIDI Ver.](https://github.com/ku-ron/chord_practice_midi)（[公開版](https://ku-ron.github.io/chord_practice_midi/)）が「弾くべきコードを出して、ちゃんと押せたか見る」のに対し、こちらは**弾いたものをそのまま映す**側です。
 
 ---
 
@@ -116,8 +118,8 @@
 
 | 環境 | どうするか |
 |---|---|
-| Mac / Windows | **Chrome、Edge、Firefox 108+** でファイルを開くだけ |
-| iPad / iPhone | **[MIDIWeb Browser](https://apps.apple.com/us/app/midiweb-browser/id6757226617)**（無料）で開く。Bluetooth MIDI のペアリングもこのアプリの中から |
+| Mac / Windows | **Chrome、Edge、Firefox 108+** で https://ku-ron.github.io/piano_monitor/ を開くだけ |
+| iPad / iPhone | **[MIDIWeb Browser](https://apps.apple.com/us/app/midiweb-browser/id6757226617)**（無料）で同じURLを開く。Bluetooth MIDI のペアリングもこのアプリの中から |
 | Mac版Safari | **MIDIは動きません**（Web MIDI API 未対応） |
 | Android | Chrome / Samsung Internet なら動くはず（未検証） |
 
@@ -139,7 +141,7 @@ Bluetooth **オーディオ**は使わないでください（MIDI とは別物�
 
 ## ファイル
 
-`index.html` の1枚だけです。ビルドも依存もありません。ダブルクリックで開けますし、そのまま GitHub Pages などに置けます。
+`index.html` の1枚だけです。ビルドも依存もありません。GitHub Pages にそのまま置いてあります（[公開版](https://ku-ron.github.io/piano_monitor/)）。手元にダウンロードしてダブルクリックしても動きます。
 
 主な部品は上から順に、音名の綴り（五度圏）、MIDI受信と発音モデル、88鍵の描画、大譜表の描画、コード判定、録音、グラフ、再生、SMF書き出し、です。
 

@@ -130,6 +130,15 @@
   /* ---- 鍵盤 ---- */
   .kbBox{background:var(--panel2);border:1px solid var(--line);border-radius:8px;padding:6px}
   .kbBox svg{display:block;width:100%;height:auto;touch-action:none}
+  /* 流れる表示。切っているときは高さを取らない */
+  #flow{display:none;width:100%;height:clamp(120px,22vh,240px)}
+  body.flowon #flow{display:block}
+  .kbrow{gap:14px;margin-bottom:6px}
+  .kbrow .chk{min-height:0;font-size:13px}
+  #spdWrap{display:none}
+  body.flowon #spdWrap{display:inline-flex}
+  #spdWrap input[type=range]{width:110px;accent-color:var(--accent)}
+  #spdWrap b{color:var(--fg);font-variant-numeric:tabular-nums;min-width:2.2em;text-align:right}
 
   /* ---- 録音・グラフ ---- */
   .stats{display:flex;flex-wrap:wrap;gap:6px 18px;margin:10px 0 6px;font-size:13px;color:var(--dim)}
@@ -232,7 +241,16 @@
   </section>
 
   <section class="panel">
-    <div class="kbBox"><svg id="kb" viewBox="0 -146 1196 288" preserveAspectRatio="xMidYMid meet"></svg></div>
+    <div class="row kbrow">
+      <label class="chk"><input type="checkbox" id="optFlow">流れる表示</label>
+      <label class="chk" id="spdWrap">速さ
+        <input type="range" id="flowSpd" min="10" max="80" step="1" value="30">
+        <b id="spdVal">3.0</b>秒</label>
+    </div>
+    <div class="kbBox">
+      <canvas id="flow"></canvas>
+      <svg id="kb" viewBox="0 -146 1196 288" preserveAspectRatio="xMidYMid meet"></svg>
+    </div>
     <div class="pedals" id="pedals"></div>
   </section>
 
@@ -440,6 +458,7 @@ const S = {
   cc:{64:0,66:0,67:0},
   seenCC:{64:true,66:false,67:false},
   recent:[],               /* 直前に弾いた音のピッチクラス（新しいものが後ろ） */
+  flow:false, flowSec:3.0, /* 流れる表示と、上まで流れきる時間（秒） */
   win:48,                  /* 調の推定に使う音数 */
   recording:false, recT0:0, events:[],
   takes:[], curId:null,
@@ -513,6 +532,8 @@ function noteOn(n,v){
   S.held.set(n,v);
   S.pedHeld.delete(n);
   S.vel.set(n, Math.max(prev,v));
+  if(S.flow){ endRibbon(n); startRibbon(n,v,COL_ON); }   /* 弾き直しは帯を区切る */
+  syncRibbons();
   rec({k:'on', a:n, b:v});
   renderLive();
 }
@@ -520,7 +541,7 @@ function noteOff(n){
   if(!S.held.has(n)) return;
   S.held.delete(n);
   if(damperDown() || S.sost.has(n)) S.pedHeld.add(n);
-  pruneVel();
+  pruneVel(); syncRibbons();
   rec({k:'off', a:n, b:0});
   renderLive();
 }
@@ -539,11 +560,13 @@ function controlPedal(cc,v){
       if(!damperDown()) S.pedHeld.clear();
     }
   }
-  pruneVel();
+  pruneVel(); syncRibbons();
   renderLive();
 }
 function panic(){
   S.held.clear(); S.pedHeld.clear(); S.sost.clear(); S.vel.clear();
+  for(const r of ribbons) if(r.t1===null) r.t1=performance.now();
+  live.clear();
   renderLive();
 }
 
@@ -561,6 +584,89 @@ const whiteX = n => WHITES.indexOf(n)*KW;
 /* 鍵の中心。ベロシティの棒もここに合わせる */
 const keyCX = n => isBlack(mod(n,12)) ? whiteX(n-1)+BLACK_OFF[mod(n,12)]*KW : whiteX(n)+KW/2;
 const VEL_TOP=-126, VEL_BASE=-6;            /* ベロシティ棒の上端（127）と下端（0） */
+
+/* =======================================================================
+   流れる表示（音ゲー風）
+   弾いている間ずっと帯が伸び、離すと下端も動きだして上へ流れていく。
+   指で押している間は青、ペダルだけで残っている間は黄。色が変わる境目で
+   帯を1本区切ることで、1本の帯を塗り分けずに済ませている。
+   ======================================================================= */
+const COL_ON='#5cc8ff', COL_PED='#ffcc66';
+const ribbons=[];                 /* {n,x,w,col,t0,t1} t1=null なら伸びている最中 */
+const live=new Map();             /* note -> いま伸ばしている帯 */
+let flowRaf=null, G=null;
+
+function ribbonBox(n){
+  const pc=mod(n,12);
+  return isBlack(pc) ? {x:keyCX(n)-BW/2, w:BW} : {x:whiteX(n)+0.6, w:KW-1.2};
+}
+function startRibbon(n,v,col){
+  const b=ribbonBox(n);
+  ribbons.push({n, x:b.x, w:b.w, col, a:0.45+0.55*clamp(v/127,0,1), t0:performance.now(), t1:null});
+  live.set(n, ribbons[ribbons.length-1]);
+  if(ribbons.length>600) ribbons.splice(0, ribbons.length-600);
+}
+function endRibbon(n){
+  const r=live.get(n);
+  if(r){ r.t1=performance.now(); live.delete(n); }
+}
+/* 鳴っている音と帯を合わせる。ペダルに移ったら色が変わるので、そこで区切る */
+function syncRibbons(){
+  if(!S.flow){ live.clear(); return; }
+  const snd=sounding();
+  for(const [n,r] of [...live]){
+    if(!snd.has(n)){ endRibbon(n); continue; }
+    const want = S.held.has(n) ? COL_ON : COL_PED;
+    if(r.col!==want){ endRibbon(n); startRibbon(n, S.vel.get(n)||90, want); }
+  }
+  for(const n of snd) if(!live.has(n)) startRibbon(n, S.vel.get(n)||90, S.held.has(n)?COL_ON:COL_PED);
+}
+/* 画面上のどこに鍵盤の x があるか。SVG は余白を作って収まることがあるので、その分をずらす */
+function syncFlow(){
+  if(!S.flow) return;
+  const el=$('kb'), cv=$('flow');
+  const r=el.getBoundingClientRect(), c=cv.getBoundingClientRect();
+  if(!c.width) return;
+  const vb=(el.getAttribute('viewBox')||'0 -146 1196 288').split(/\s+/).map(Number);
+  const s=Math.min(r.width/vb[2], r.height/vb[3]);
+  G={s, ox:r.left+(r.width-vb[2]*s)/2-vb[0]*s-c.left, h:c.height, w:c.width};
+  const dpr=Math.min(devicePixelRatio||1, 2);
+  if(cv.width!==Math.round(c.width*dpr)||cv.height!==Math.round(c.height*dpr)){
+    cv.width=Math.round(c.width*dpr); cv.height=Math.round(c.height*dpr);
+  }
+}
+function drawFlow(){
+  if(!S.flow){ flowRaf=null; return; }
+  const cv=$('flow'), ctx=cv.getContext('2d');
+  if(!G) syncFlow();
+  if(!G){ flowRaf=requestAnimationFrame(drawFlow); return; }
+  const dpr=cv.width/(G.w||1);
+  ctx.setTransform(dpr,0,0,dpr,0,0);
+  ctx.clearRect(0,0,G.w,G.h);
+  const now=performance.now(), H=G.h, px=H/(S.flowSec*1000);   /* 1ミリ秒あたりの上り幅 */
+  for(let i=ribbons.length-1;i>=0;i--){
+    const r=ribbons[i];
+    const yTop=H-(now-r.t0)*px;
+    const yBot=H-(now-(r.t1===null?now:r.t1))*px;
+    if(yBot<-4){ ribbons.splice(i,1); continue; }
+    const x=G.ox+r.x*G.s, w=Math.max(2,r.w*G.s);
+    const y=Math.max(yTop,-8), hh=Math.min(yBot,H)-y;
+    if(hh<=0) continue;
+    ctx.globalAlpha=r.a;
+    ctx.fillStyle=r.col;
+    ctx.beginPath();
+    const rad=Math.min(4, w/2, hh/2);
+    if(ctx.roundRect) ctx.roundRect(x,y,w,hh,rad); else ctx.rect(x,y,w,hh);
+    ctx.fill();
+  }
+  ctx.globalAlpha=1;
+  flowRaf=requestAnimationFrame(drawFlow);
+}
+function flowStart(){
+  if(!S.flow||flowRaf!==null) return;
+  syncFlow();
+  flowRaf=requestAnimationFrame(drawFlow);
+}
 
 function drawKeyboard(){
   const snd=sounding();
@@ -953,6 +1059,7 @@ function renderLiveNow(){
   drawPedals();
   drawKeyRank();
   drawPcChart();
+  syncFlow();
 }
 
 /* =======================================================================
@@ -1315,7 +1422,7 @@ function wireCharts(){
   });
   box.addEventListener('dblclick',()=>{ S.view=null; drawCharts(); });
 }
-addEventListener('resize',()=>{ if(CHARTS.length) drawCharts(); renderLive(); });
+addEventListener("resize",()=>{ if(CHARTS.length) drawCharts(); G=null; renderLive(); });
 
 /* =======================================================================
    再生
@@ -1693,7 +1800,7 @@ const LS='pm.v1.';
 function saveOpts(){
   try{ localStorage.setItem(LS+'opts',JSON.stringify({
     keyIdx:S.keyIdx, pedalHold:S.pedalHold, showChord:S.showChord, showNames:S.showNames,
-    win:S.win})); }catch(e){}
+    win:S.win, flow:S.flow, flowSec:S.flowSec})); }catch(e){}
 }
 function loadOpts(){
   try{
@@ -1703,6 +1810,8 @@ function loadOpts(){
     if(typeof o.showChord==='boolean') S.showChord=o.showChord;
     if(typeof o.showNames==='boolean') S.showNames=o.showNames;
     if(WINDOWS.includes(o.win)) S.win=o.win;
+    if(typeof o.flow==='boolean') S.flow=o.flow;
+    if(typeof o.flowSec==='number') S.flowSec=clamp(o.flowSec,1,8);
   }catch(e){}
 }
 function saveTakes(){
@@ -1726,7 +1835,11 @@ function loadTakes(){
    ======================================================================= */
 loadOpts(); loadTakes();
 
-$('winSel').value=Math.max(0,WINDOWS.indexOf(S.win));
+$("optFlow").checked=S.flow;
+document.body.classList.toggle("flowon",S.flow);
+$("flowSpd").value=Math.round(S.flowSec*10);
+$("spdVal").textContent=S.flowSec.toFixed(1);
+$("winSel").value=Math.max(0,WINDOWS.indexOf(S.win));
 $('winVal').textContent=S.win;
 $('optPedal').checked=S.pedalHold;
 $('optChord').checked=S.showChord;
@@ -1742,7 +1855,18 @@ $('krank').addEventListener('click',ev=>{
   const b=ev.target.closest('.chip'); if(!b) return;
   setKey(+b.dataset.k);
 });
-$('btnResetPc').addEventListener('click',()=>{ S.recent=[]; renderLive(); });
+$("btnResetPc").addEventListener("click",()=>{ S.recent=[]; renderLive(); });
+$("optFlow").addEventListener("change",e=>{
+  S.flow=e.target.checked;
+  document.body.classList.toggle("flowon",S.flow);
+  saveOpts(); syncRibbons(); renderLive();
+  if(S.flow) flowStart();
+});
+$("flowSpd").addEventListener("input",e=>{
+  S.flowSec=(+e.target.value)/10;
+  $("spdVal").textContent=S.flowSec.toFixed(1);
+  saveOpts();
+});
 $('winSel').addEventListener('input',e=>{
   S.win=WINDOWS[+e.target.value]||48;
   $('winVal').textContent=S.win;
@@ -1794,6 +1918,8 @@ refreshTakes();
 drawWheel();
 renderLive();
 renderTake();
+syncRibbons();
+if(S.flow) flowStart();
 </script>
 </body>
 </html>

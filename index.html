@@ -95,12 +95,11 @@
   .krank .none{font-size:12px;color:var(--dim2)}
 
   /* ---- ピッチクラスの割合 ---- */
-  /* グラフとつまみは下寄せ。リセットはその上に大きく置く */
+  /* グラフは隙間を埋めるように縦へ伸びる（高さは描画時に測って合わせる） */
   .pcBox{flex:1 1 240px;min-width:210px;max-width:420px;
-         display:flex;flex-direction:column;justify-content:flex-end;gap:4px;align-self:stretch}
-  .pcBox svg{display:block;width:100%;height:auto}
+         display:flex;flex-direction:column;gap:4px;align-self:stretch}
+  .pcBox svg{display:block;width:100%;flex:1 1 0;min-height:80px}
   .pcBox .lbl{margin-bottom:0}
-  .pcBox .reset{width:100%;min-height:40px;font-size:13px;margin-bottom:4px}
   .winRow{display:flex;align-items:center;gap:8px;font-size:12px;color:var(--dim);margin-top:6px;flex-wrap:wrap}
   .winRow .t{white-space:nowrap}
   .winRow b{color:var(--fg);font-variant-numeric:tabular-nums;min-width:2.4em;text-align:right}
@@ -201,8 +200,7 @@
         <div class="wheelCap" id="keyCap">&nbsp;</div>
         <div class="lbl">弾いている音から見た調号の候補 <span class="n" id="krankN"></span></div>
         <div id="krank" class="krank"></div>
-        <div class="hint">分かるのは<b>調号まで</b>です。長調か平行短調かは、使っている音の種類だけでは決まりません（どちらも同じ7音）。名前を押すとその調に切り替わります。<br>
-          参照する音数は右下のつまみで変えられます。少なくすると転調にすぐ追いつき、多くすると迷いにくくなります。</div>
+        <div class="hint">分かるのは<b>調号まで</b>です。名前を押すとその調に切り替わります。参照する音数は右下のつまみで変えられます。</div>
       </div>
     </div>
   </section>
@@ -213,6 +211,7 @@
       <label class="chk"><input type="checkbox" id="optChord" checked>コード名</label>
       <label class="chk"><input type="checkbox" id="optNames" checked>音名</label>
       <button id="btnPanic">全消音</button>
+      <button id="btnResetPc" title="調号の候補もいっしょにリセットします">集計をリセット</button>
     </div>
     <div class="live">
       <div class="staffBox"><svg id="staff" aria-label="いま鳴っている音"></svg></div>
@@ -222,7 +221,6 @@
       </div>
       <div class="pcBox">
         <div class="lbl">音の使われ方（最大を1とした割合）</div>
-        <button id="btnResetPc" class="reset" title="調号の候補もいっしょにリセットします">集計をリセット</button>
         <svg id="pcChart" viewBox="0 0 304 132" aria-label="ピッチクラスごとの割合"></svg>
         <label class="winRow"><span class="t">直前 <b id="winVal">48</b> 音から集計</span>
           <input type="range" id="winSel" min="0" max="10" step="1" value="5">
@@ -892,7 +890,11 @@ function drawKeyRank(){
 
 function drawPcChart(){
   const {h,n,max}=pcHist(), c=keyCenter();
-  const W=304, X0=6, X1=298, Y0=14, Y1=104, slot=(X1-X0)/12, bw=Math.min(18,slot-6);
+  /* 実際に置かれている高さに合わせて座標系を作り、余白なく縦へ伸ばす */
+  const el=$('pcChart'), pw=el.clientWidth||304, ph=el.clientHeight||132;
+  const W=304, VH=clamp(Math.round(W*ph/pw), 100, 400);
+  el.setAttribute('viewBox',`0 0 ${W} ${VH}`);
+  const X0=6, X1=298, Y0=14, Y1=VH-24, slot=(X1-X0)/12, bw=Math.min(20,slot-5);
   let s=`<line x1="${X0}" y1="${Y1}" x2="${X1}" y2="${Y1}" stroke="var(--line)" stroke-width="1"/>`;
   s+=`<line x1="${X0}" y1="${Y0}" x2="${X1}" y2="${Y0}" stroke="var(--line)" stroke-width="1" opacity="0.5" stroke-dasharray="3 3"/>`;
   for(let pc=0;pc<12;pc++){
@@ -1308,7 +1310,7 @@ function wireCharts(){
   });
   box.addEventListener('dblclick',()=>{ S.view=null; drawCharts(); });
 }
-addEventListener('resize',()=>{ if(CHARTS.length) drawCharts(); });
+addEventListener('resize',()=>{ if(CHARTS.length) drawCharts(); renderLive(); });
 
 /* =======================================================================
    再生

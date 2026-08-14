@@ -59,18 +59,45 @@
 
   /* ---- 上段：五度圏・楽譜・コード名 ---- */
   .live{display:flex;gap:14px;align-items:flex-start;flex-wrap:wrap;margin:10px 0 12px}
-  .wheelBox{width:min(480px,100%);margin:0 auto}
+  .keyRow{display:flex;gap:18px;align-items:flex-start;flex-wrap:wrap}
+  .wheelBox{width:min(440px,100%);flex:0 0 auto}
   .wheelBox svg{display:block;width:100%;height:auto;touch-action:manipulation}
   .wheelBox svg .sec{cursor:pointer}
   .wheelBox svg .sec:hover .bg{fill:#31384a}
   .wheelCap{text-align:center;font-size:13px;color:var(--dim);margin-top:2px}
   .wheelCap b{color:var(--fg);font-size:15px;font-weight:600}
+
+  /* ---- 調号の候補 ---- */
+  .krankBox{flex:1 1 300px;min-width:280px}
+  .lbl{font-size:12px;color:var(--dim);margin-bottom:8px}
+  .lbl span{color:var(--dim2)}
+  .krank{display:flex;flex-direction:column;gap:7px}
+  .kr{display:flex;align-items:center;gap:8px;font-size:13px}
+  .kr .sig{width:3.4em;flex:0 0 auto;text-align:right;color:var(--fg);font-weight:600;font-variant-numeric:tabular-nums}
+  .kr .kbar{flex:1 1 auto;height:12px;background:var(--panel2);border-radius:6px;overflow:hidden;min-width:40px}
+  .kr .kbar i{display:block;height:100%;background:var(--dim2);border-radius:6px}
+  .kr.top .kbar i{background:var(--accent)}
+  .kr.top .sig{color:var(--accent)}
+  .kr .chip{
+    background:var(--panel2);border:1px solid var(--line);color:var(--dim);
+    border-radius:7px;padding:3px 9px;font-size:12px;min-height:0;cursor:pointer;
+  }
+  .kr .chip.cur{background:var(--accent);color:#06202c;border-color:var(--accent);font-weight:600}
+  .kr .alt{font-size:11px;color:var(--dim2)}
+  .krank .none{font-size:12px;color:var(--dim2)}
+
+  /* ---- ピッチクラスの割合 ---- */
+  .pcBox{flex:1 1 300px;min-width:280px;max-width:420px}
+  .pcBox svg{display:block;width:100%;height:auto}
+  .winRow{display:flex;align-items:center;gap:8px;font-size:12px;color:var(--dim);margin-top:6px}
+  .winRow b{color:var(--fg);font-variant-numeric:tabular-nums;min-width:2.4em;text-align:right}
+  .winRow input[type=range]{flex:1 1 auto;accent-color:var(--accent);min-width:90px}
   .staffBox{
     background:var(--paper);border-radius:10px;padding:6px 4px;flex:0 0 auto;
-    width:min(284px,100%);
+    width:min(250px,100%);
   }
   .staffBox svg{display:block;width:100%;height:auto}
-  .readout{flex:1 1 220px;min-width:200px;max-width:400px;display:flex;flex-direction:column;gap:10px}
+  .readout{flex:1 1 190px;min-width:170px;max-width:280px;display:flex;flex-direction:column;gap:10px}
   .chord{font-size:34px;font-weight:600;letter-spacing:.01em;line-height:1.1;min-height:38px}
   .chord .sm{font-size:20px;color:var(--dim);font-weight:400;margin-left:6px}
   .notes{font-size:14px;color:var(--dim);min-height:22px;word-break:break-all}
@@ -151,9 +178,17 @@
 
   <section class="panel">
     <h2>調</h2>
-    <div class="wheelBox">
-      <svg id="wheel" viewBox="0 0 268 268" aria-label="調の選択（五度圏）"></svg>
-      <div class="wheelCap" id="keyCap">&nbsp;</div>
+    <div class="keyRow">
+      <div class="wheelBox">
+        <svg id="wheel" viewBox="0 0 268 268" aria-label="調の選択（五度圏）"></svg>
+        <div class="wheelCap" id="keyCap">&nbsp;</div>
+      </div>
+      <div class="krankBox">
+        <div class="lbl">弾いている音から見た調号の候補 <span id="krankN"></span></div>
+        <div id="krank" class="krank"></div>
+        <div class="hint">分かるのは<b>調号まで</b>です。長調か平行短調かは、使っている音の種類だけでは決まりません（どちらも同じ7音）。名前を押すとその調に切り替わります。<br>
+          参照する音数は右下のつまみで変えられます。少なくすると転調にすぐ追いつき、多くすると迷いにくくなります。</div>
+      </div>
     </div>
   </section>
 
@@ -170,11 +205,18 @@
         <div class="chord" id="chordName">&nbsp;</div>
         <div class="notes" id="noteList">&nbsp;</div>
       </div>
+      <div class="pcBox">
+        <div class="lbl">音の使われ方（いちばん多い音を1とした割合）</div>
+        <svg id="pcChart" viewBox="0 0 304 132" aria-label="ピッチクラスごとの割合"></svg>
+        <label class="winRow">直前 <b id="winVal">48</b> 音から集計
+          <input type="range" id="winSel" min="0" max="10" step="1" value="5">
+        </label>
+      </div>
     </div>
   </section>
 
   <section class="panel">
-    <div class="kbBox"><svg id="kb" viewBox="0 -86 1196 228" preserveAspectRatio="xMidYMid meet"></svg></div>
+    <div class="kbBox"><svg id="kb" viewBox="0 -146 1196 288" preserveAspectRatio="xMidYMid meet"></svg></div>
     <div class="pedals" id="pedals"></div>
     <div class="hint">上の棒は、いま鳴っている音のベロシティです（ペダルで残っている音も含みます）。青は指で押している音、黄はペダルで残っている音。鍵盤はクリック／タップでも鳴らせます。</div>
   </section>
@@ -382,6 +424,8 @@ const S = {
   sost:new Set(),          /* ソステヌートで捕まえた音 */
   cc:{64:0,66:0,67:0},
   seenCC:{64:true,66:false,67:false},
+  recent:[],               /* 直前に弾いた音のピッチクラス（新しいものが後ろ） */
+  win:48,                  /* 調の推定に使う音数 */
   recording:false, recT0:0, events:[],
   takes:[], curId:null,
   view:null,               /* グラフの表示範囲 {t0,t1} */
@@ -444,6 +488,8 @@ function pruneVel(){
   for(const n of S.vel.keys()) if(!snd.has(n)) S.vel.delete(n);
 }
 function noteOn(n,v){
+  S.recent.push(mod(n,12));
+  if(S.recent.length>WINDOWS[WINDOWS.length-1]) S.recent.shift();
   /* まだ鳴っているうちに弾き直したときは、大きいほうを残す */
   const prev = sounding().has(n) ? (S.vel.get(n)||0) : 0;
   S.held.set(n,v);
@@ -496,7 +542,7 @@ const whiteX = n => WHITES.indexOf(n)*KW;
 
 /* 鍵の中心。ベロシティの棒もここに合わせる */
 const keyCX = n => isBlack(mod(n,12)) ? whiteX(n-1)+BLACK_OFF[mod(n,12)]*KW : whiteX(n)+KW/2;
-const VEL_TOP=-66, VEL_BASE=-6;            /* ベロシティ棒の上端（127）と下端（0） */
+const VEL_TOP=-126, VEL_BASE=-6;            /* ベロシティ棒の上端（127）と下端（0） */
 
 function drawKeyboard(){
   const snd=sounding();
@@ -584,7 +630,7 @@ function drawKeyboard(){
 const SP=9, HS=SP/2;              /* 五線の間隔と、その半分（＝1段） */
 const TREB_E4_Y=126;              /* 高音部譜表の下線 E4 */
 const BASS_G2_Y=198;              /* 低音部譜表の下線 G2 */
-const STAFF_X0=14, STAFF_X1=270;
+const STAFF_X0=14, STAFF_X1=236;
 const yTreble = step => TREB_E4_Y-(step-30)*HS;
 const yBass   = step => BASS_G2_Y-(step-18)*HS;
 /* 表示範囲は固定。どの調でも 88鍵の両端（A0・C8）が最初から収まる高さにして
@@ -770,6 +816,82 @@ function chordName(){
 }
 
 /* =======================================================================
+   弾いた音から調号を当てる
+   直前 N 音のピッチクラスを数え、五度線の上で「7音ぶんの窓」がいちばん
+   よく合う位置を探す。調号までしか分からない（長調か平行短調かは、音の
+   並びだけでは決まらない）ので、そこは弾いている本人に選んでもらう。
+   ======================================================================= */
+const WINDOWS=[8,12,16,24,32,48,64,96,128,192,256];
+const MAJ_BY_SIG={}, MIN_BY_SIG={};
+KEYS.forEach((k,i)=>{ (i<15?MAJ_BY_SIG:MIN_BY_SIG)[k.sig]=i; });
+
+function pcHist(){
+  const a=S.recent.slice(-S.win), h=new Array(12).fill(0);
+  for(const pc of a) h[pc]++;
+  return {h, n:a.length, max:Math.max(...h)};
+}
+/* 五度線の中心 c から見た距離で重みを付ける。0〜3 が調号どおりの7音 */
+const fifthDist=(pc,c)=>{
+  const f0=mod(7*pc,12);
+  let best=Infinity;
+  for(let k=-2;k<=2;k++){ const d=Math.abs(f0+12*k-c); if(d<best) best=d; }
+  return best;
+};
+function keyScores(){
+  const {h,n}=pcHist();
+  if(!n) return [];
+  const out=[];
+  for(let s=-5;s<=6;s++){                 /* 音の集合が重ならない12通り */
+    let sc=0;
+    for(let pc=0;pc<12;pc++){
+      if(!h[pc]) continue;
+      const d=fifthDist(pc,s+2);
+      sc += h[pc]*(d<=3?1:d===4?0.25:d===5?-0.25:-0.6);
+    }
+    out.push({sig:s, score:sc/n});
+  }
+  out.sort((a,b)=>b.score-a.score);
+  return out;
+}
+const sigLabel = s => s===0?'なし':`${Math.abs(s)}${s>0?'♯':'♭'}`;
+
+function drawKeyRank(){
+  const {n}=pcHist();
+  $('krankN').textContent = n?`（直前${n}音）`:'';
+  const list=keyScores();
+  if(!list.length){ $('krank').innerHTML='<div class="none">まだ音が来ていません。弾くと、調号の候補がここに並びます。</div>'; return; }
+  $("krank").innerHTML=list.slice(0,5).map((r,i)=>{
+    const p=Math.round(clamp(r.score,0,1)*100);
+    const mj=MAJ_BY_SIG[r.sig], mn=MIN_BY_SIG[r.sig];
+    const chip=(idx,txt)=>`<button class="chip${idx===S.keyIdx?' cur':''}" data-k="${idx}">${txt}</button>`;
+    const alt = r.sig===6 ? `<span class="alt">＝${KEYS[MAJ_BY_SIG[-6]].label.split(' ')[0]}／${KEYS[MIN_BY_SIG[-6]].label.split(' ')[0]}m</span>` : '';
+    return `<div class="kr${i===0?' top':''}"><span class="sig">${sigLabel(r.sig)}</span>`
+      +`<span class="kbar"><i style="width:${p}%"></i></span>`
+      +chip(mj, KEYS[mj].label.split(' ')[0])
+      +chip(mn, KEYS[mn].label.split(' ')[0]+'m')+alt+`</div>`;
+  }).join('');
+}
+
+function drawPcChart(){
+  const {h,n,max}=pcHist(), c=keyCenter();
+  const W=304, X0=6, X1=298, Y0=14, Y1=104, slot=(X1-X0)/12, bw=Math.min(18,slot-6);
+  let s=`<line x1="${X0}" y1="${Y1}" x2="${X1}" y2="${Y1}" stroke="var(--line)" stroke-width="1"/>`;
+  s+=`<line x1="${X0}" y1="${Y0}" x2="${X1}" y2="${Y0}" stroke="var(--line)" stroke-width="1" opacity="0.5" stroke-dasharray="3 3"/>`;
+  for(let pc=0;pc<12;pc++){
+    const cx=X0+slot*(pc+0.5), inKey=fifthDist(pc,keySig()+2)<=3;
+    const v=max?h[pc]/max:0, hh=v*(Y1-Y0);
+    if(hh>0.5) s+=`<rect x="${(cx-bw/2).toFixed(1)}" y="${(Y1-hh).toFixed(1)}" width="${bw.toFixed(1)}" `
+      +`height="${hh.toFixed(1)}" rx="2" fill="${inKey?'var(--accent)':'var(--dim2)'}"><title>${h[pc]}音</title></rect>`;
+    if(h[pc]) s+=`<text x="${cx.toFixed(1)}" y="${(Y1-hh-3).toFixed(1)}" text-anchor="middle" font-size="8.5" fill="var(--dim)">${h[pc]}</text>`;
+    s+=`<text x="${cx.toFixed(1)}" y="${Y1+15}" text-anchor="middle" font-size="10.5" `
+      +`fill="${inKey?'var(--fg)':'var(--dim2)'}">${noteName(60+pc,c)}</text>`;
+  }
+  if(!n) s+=`<text x="${W/2}" y="${(Y0+Y1)/2}" text-anchor="middle" dominant-baseline="central" `
+    +`font-size="11" fill="var(--dim2)">まだ音が来ていません</text>`;
+  $('pcChart').innerHTML=s;
+}
+
+/* =======================================================================
    ライブ表示のまとめ
    ======================================================================= */
 function drawPedals(){
@@ -804,6 +926,8 @@ function renderLiveNow(){
     $('chordName').innerHTML = ch ? ch.txt+(ch.slash?`<span class="sm">${ch.slash}</span>`:'') : '&nbsp;';
   } else $('chordName').innerHTML='&nbsp;';
   drawPedals();
+  drawKeyRank();
+  drawPcChart();
 }
 
 /* =======================================================================
@@ -1543,7 +1667,8 @@ function safeName(t){
 const LS='pm.v1.';
 function saveOpts(){
   try{ localStorage.setItem(LS+'opts',JSON.stringify({
-    keyIdx:S.keyIdx, pedalHold:S.pedalHold, showChord:S.showChord, showNames:S.showNames})); }catch(e){}
+    keyIdx:S.keyIdx, pedalHold:S.pedalHold, showChord:S.showChord, showNames:S.showNames,
+    win:S.win})); }catch(e){}
 }
 function loadOpts(){
   try{
@@ -1552,6 +1677,7 @@ function loadOpts(){
     if(typeof o.pedalHold==='boolean') S.pedalHold=o.pedalHold;
     if(typeof o.showChord==='boolean') S.showChord=o.showChord;
     if(typeof o.showNames==='boolean') S.showNames=o.showNames;
+    if(WINDOWS.includes(o.win)) S.win=o.win;
   }catch(e){}
 }
 function saveTakes(){
@@ -1575,14 +1701,26 @@ function loadTakes(){
    ======================================================================= */
 loadOpts(); loadTakes();
 
+$('winSel').value=Math.max(0,WINDOWS.indexOf(S.win));
+$('winVal').textContent=S.win;
 $('optPedal').checked=S.pedalHold;
 $('optChord').checked=S.showChord;
 $('optNames').checked=S.showNames;
 
 $('btnConnect').addEventListener('click',connectMidi);
+const setKey=i=>{ S.keyIdx=i; saveOpts(); drawWheel(); renderLive(); };
 $('wheel').addEventListener('click',ev=>{
   const g=ev.target.closest('.sec'); if(!g) return;
-  S.keyIdx=+g.dataset.k; saveOpts(); drawWheel(); renderLive();
+  setKey(+g.dataset.k);
+});
+$('krank').addEventListener('click',ev=>{
+  const b=ev.target.closest('.chip'); if(!b) return;
+  setKey(+b.dataset.k);
+});
+$('winSel').addEventListener('input',e=>{
+  S.win=WINDOWS[+e.target.value]||48;
+  $('winVal').textContent=S.win;
+  saveOpts(); renderLive();
 });
 $('optPedal').addEventListener('change',e=>{ S.pedalHold=e.target.checked; saveOpts(); renderLive(); });
 $('optChord').addEventListener('change',e=>{ S.showChord=e.target.checked; saveOpts(); renderLive(); });

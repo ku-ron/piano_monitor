@@ -58,9 +58,10 @@
   .stat.ok{color:var(--ok)} .stat.ng{color:var(--ng)} .stat.warn{color:var(--warn)}
 
   /* ---- 上段：五度圏・楽譜・コード名 ---- */
-  .live{display:flex;gap:14px;align-items:flex-start;flex-wrap:wrap;margin:10px 0 12px}
-  .keyRow{display:flex;gap:18px;align-items:flex-start;flex-wrap:wrap}
-  .wheelBox{width:min(440px,100%);flex:0 0 auto}
+  .live{display:flex;gap:12px;align-items:flex-start;flex-wrap:nowrap;margin:10px 0 12px}
+  /* iPad mini（横744px）でも1行に収まる配分にする。足りなければ五度圏が縮む */
+  .keyRow{display:flex;gap:14px;align-items:flex-start;flex-wrap:nowrap}
+  .wheelBox{flex:0 1 440px;min-width:200px}
   .wheelBox svg{display:block;width:100%;height:auto;touch-action:manipulation}
   .wheelBox svg .sec{cursor:pointer}
   .wheelBox svg .sec:hover .bg{fill:#31384a}
@@ -68,13 +69,13 @@
   .wheelCap b{color:var(--fg);font-size:15px;font-weight:600}
 
   /* ---- 調号の候補 ---- */
-  .krankBox{flex:1 1 300px;min-width:280px}
+  .krankBox{flex:1 1 210px;min-width:190px}
   .lbl{font-size:12px;color:var(--dim);margin-bottom:8px}
-  .lbl span{color:var(--dim2)}
+  .lbl .n{color:var(--dim2);white-space:nowrap}
   .krank{display:flex;flex-direction:column;gap:7px}
-  .kr{display:flex;align-items:center;gap:8px;font-size:13px}
-  .kr .sig{width:3.4em;flex:0 0 auto;text-align:right;color:var(--fg);font-weight:600;font-variant-numeric:tabular-nums}
-  .kr .kbar{flex:1 1 auto;height:12px;background:var(--panel2);border-radius:6px;overflow:hidden;min-width:40px}
+  .kr{display:flex;align-items:center;gap:7px;font-size:13px;flex-wrap:wrap}
+  .kr .sig{width:3.2em;flex:0 0 auto;text-align:right;color:var(--fg);font-weight:600;font-variant-numeric:tabular-nums}
+  .kr .kbar{flex:1 1 40px;height:12px;background:var(--panel2);border-radius:6px;overflow:hidden;min-width:30px}
   .kr .kbar i{display:block;height:100%;background:var(--dim2);border-radius:6px}
   .kr.top .kbar i{background:var(--accent)}
   .kr.top .sig{color:var(--accent)}
@@ -84,23 +85,28 @@
   }
   .kr .chip.cur{background:var(--accent);color:#06202c;border-color:var(--accent);font-weight:600}
   .kr .alt{font-size:11px;color:var(--dim2)}
+  @media (max-width:900px){ .kr .alt{display:none} }
   .krank .none{font-size:12px;color:var(--dim2)}
 
   /* ---- ピッチクラスの割合 ---- */
-  .pcBox{flex:1 1 300px;min-width:280px;max-width:420px}
+  .pcBox{flex:1 1 240px;min-width:210px;max-width:420px}
   .pcBox svg{display:block;width:100%;height:auto}
-  .winRow{display:flex;align-items:center;gap:8px;font-size:12px;color:var(--dim);margin-top:6px}
+  .pcBox .lbl{display:flex;align-items:center;justify-content:space-between;gap:8px}
+  .pcBox .lbl button{padding:3px 9px;font-size:11px;min-height:0;flex:0 0 auto;color:var(--dim)}
+  .winRow{display:flex;align-items:center;gap:8px;font-size:12px;color:var(--dim);margin-top:6px;flex-wrap:wrap}
+  .winRow .t{white-space:nowrap}
   .winRow b{color:var(--fg);font-variant-numeric:tabular-nums;min-width:2.4em;text-align:right}
   .winRow input[type=range]{flex:1 1 auto;accent-color:var(--accent);min-width:90px}
   .staffBox{
-    background:var(--paper);border-radius:10px;padding:6px 4px;flex:0 0 auto;
-    width:min(250px,100%);
+    background:var(--paper);border-radius:10px;padding:6px 4px;
+    flex:0 1 250px;min-width:150px;
   }
   .staffBox svg{display:block;width:100%;height:auto}
-  .readout{flex:1 1 190px;min-width:170px;max-width:280px;display:flex;flex-direction:column;gap:10px}
+  .readout{flex:1 1 140px;min-width:120px;max-width:260px;display:flex;flex-direction:column;gap:10px}
   .chord{font-size:34px;font-weight:600;letter-spacing:.01em;line-height:1.1;min-height:38px}
   .chord .sm{font-size:20px;color:var(--dim);font-weight:400;margin-left:6px}
-  .notes{font-size:14px;color:var(--dim);min-height:22px;word-break:break-all}
+  .notes{font-size:14px;color:var(--dim);min-height:22px}
+  .notes b,.notes i{white-space:nowrap}
   .notes b{color:var(--fg);font-weight:600}
   .notes i{color:var(--ped);font-style:normal}
   .pedals{display:flex;flex-direction:column;gap:6px;margin-top:10px}
@@ -158,7 +164,12 @@
   }
   .mrow{display:flex;gap:8px;justify-content:flex-end}
   .mbox button.danger{background:#b0353a;border-color:#c9464b;color:#fff;font-weight:600}
-  @media (max-width:640px){
+  /* ここまで狭いと1行には収まらないので、素直に折り返す */
+  @media (max-width:620px){
+    .keyRow,.live{flex-wrap:wrap}
+    .wheelBox{flex:1 1 100%}
+    .staffBox{flex:1 1 100%;max-width:300px}
+    .readout,.pcBox{max-width:none}
     .chord{font-size:26px}
     .wrap{padding:8px 8px 40px}
   }
@@ -184,7 +195,7 @@
         <div class="wheelCap" id="keyCap">&nbsp;</div>
       </div>
       <div class="krankBox">
-        <div class="lbl">弾いている音から見た調号の候補 <span id="krankN"></span></div>
+        <div class="lbl">弾いている音から見た調号の候補 <span class="n" id="krankN"></span></div>
         <div id="krank" class="krank"></div>
         <div class="hint">分かるのは<b>調号まで</b>です。長調か平行短調かは、使っている音の種類だけでは決まりません（どちらも同じ7音）。名前を押すとその調に切り替わります。<br>
           参照する音数は右下のつまみで変えられます。少なくすると転調にすぐ追いつき、多くすると迷いにくくなります。</div>
@@ -206,9 +217,10 @@
         <div class="notes" id="noteList">&nbsp;</div>
       </div>
       <div class="pcBox">
-        <div class="lbl">音の使われ方（いちばん多い音を1とした割合）</div>
+        <div class="lbl"><span>音の使われ方（最大を1とした割合）</span>
+          <button id="btnResetPc" title="調号の候補もいっしょにリセットします">集計をリセット</button></div>
         <svg id="pcChart" viewBox="0 0 304 132" aria-label="ピッチクラスごとの割合"></svg>
-        <label class="winRow">直前 <b id="winVal">48</b> 音から集計
+        <label class="winRow"><span class="t">直前 <b id="winVal">48</b> 音から集計</span>
           <input type="range" id="winSel" min="0" max="10" step="1" value="5">
         </label>
       </div>
@@ -1717,6 +1729,7 @@ $('krank').addEventListener('click',ev=>{
   const b=ev.target.closest('.chip'); if(!b) return;
   setKey(+b.dataset.k);
 });
+$('btnResetPc').addEventListener('click',()=>{ S.recent=[]; renderLive(); });
 $('winSel').addEventListener('input',e=>{
   S.win=WINDOWS[+e.target.value]||48;
   $('winVal').textContent=S.win;

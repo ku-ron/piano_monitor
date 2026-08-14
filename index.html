@@ -59,7 +59,7 @@
 
   /* ---- 上段：五度圏・楽譜・コード名 ---- */
   .live{display:flex;gap:14px;align-items:flex-start;flex-wrap:wrap;margin:10px 0 12px}
-  .wheelBox{flex:0 0 auto;width:268px;max-width:100%}
+  .wheelBox{width:min(480px,100%);margin:0 auto}
   .wheelBox svg{display:block;width:100%;height:auto;touch-action:manipulation}
   .wheelBox svg .sec{cursor:pointer}
   .wheelBox svg .sec:hover .bg{fill:#31384a}
@@ -67,7 +67,7 @@
   .wheelCap b{color:var(--fg);font-size:15px;font-weight:600}
   .staffBox{
     background:var(--paper);border-radius:10px;padding:6px 4px;flex:0 0 auto;
-    width:min(312px,100%);
+    width:min(284px,100%);
   }
   .staffBox svg{display:block;width:100%;height:auto}
   .readout{flex:1 1 220px;min-width:200px;max-width:400px;display:flex;flex-direction:column;gap:10px}
@@ -76,13 +76,14 @@
   .notes{font-size:14px;color:var(--dim);min-height:22px;word-break:break-all}
   .notes b{color:var(--fg);font-weight:600}
   .notes i{color:var(--ped);font-style:normal}
-  .pedals{display:flex;flex-direction:column;gap:5px;margin-top:2px}
-  .pd{display:flex;align-items:center;gap:8px;font-size:12px;color:var(--dim)}
-  .pd .nm{width:5.2em;flex:0 0 auto}
-  .pd .bar{flex:1 1 auto;height:9px;background:var(--panel2);border-radius:5px;overflow:hidden}
-  .pd .bar i{display:block;height:100%;background:var(--dim2);border-radius:5px;transition:width .05s linear}
+  .pedals{display:flex;flex-direction:column;gap:6px;margin-top:10px}
+  .pd{display:flex;align-items:center;gap:10px;font-size:12px;color:var(--dim)}
+  .pd .nm{width:6.4em;flex:0 0 auto}
+  .pd .bar{flex:1 1 auto;height:14px;background:var(--panel2);border-radius:7px;position:relative;overflow:hidden}
+  .pd .bar i{display:block;height:100%;background:var(--dim2);border-radius:7px;transition:width .05s linear}
+  .pd .bar u{position:absolute;top:0;bottom:0;width:1px;background:var(--dim2);opacity:.75}
   .pd.down .bar i{background:var(--ped)}
-  .pd .vv{width:2.4em;text-align:right;font-variant-numeric:tabular-nums;flex:0 0 auto}
+  .pd .vv{width:2.6em;text-align:right;font-variant-numeric:tabular-nums;flex:0 0 auto;color:var(--fg)}
 
   /* ---- 鍵盤 ---- */
   .kbBox{background:var(--panel2);border:1px solid var(--line);border-radius:8px;padding:6px}
@@ -110,6 +111,26 @@
   .empty{color:var(--dim2);font-size:13px;padding:18px 4px}
   .hint{font-size:12px;color:var(--dim2);margin-top:8px;line-height:1.6}
   .hint a{color:var(--dim)}
+
+  /* ---- 確認・入力の窓 ---- */
+  .modal{
+    position:fixed;inset:0;z-index:50;padding:18px;
+    background:#0009;display:flex;align-items:center;justify-content:center;
+  }
+  .modal[hidden]{display:none}
+  .mbox{
+    background:var(--panel);border:1px solid var(--line);border-radius:12px;
+    padding:16px;width:100%;max-width:400px;box-shadow:0 14px 44px #000a;
+  }
+  .mtitle{font-size:15px;font-weight:600;margin-bottom:6px}
+  .mbody{font-size:13px;color:var(--dim);margin-bottom:12px;word-break:break-all}
+  .mbody:empty{display:none}
+  .minput{
+    width:100%;background:var(--panel2);color:var(--fg);border:1px solid var(--line);
+    border-radius:8px;padding:10px;font-size:16px;font-family:inherit;margin-bottom:12px;
+  }
+  .mrow{display:flex;gap:8px;justify-content:flex-end}
+  .mbox button.danger{background:#b0353a;border-color:#c9464b;color:#fff;font-weight:600}
   @media (max-width:640px){
     .chord{font-size:26px}
     .wrap{padding:8px 8px 40px}
@@ -129,28 +150,33 @@
   </section>
 
   <section class="panel">
+    <h2>調</h2>
+    <div class="wheelBox">
+      <svg id="wheel" viewBox="0 0 268 268" aria-label="調の選択（五度圏）"></svg>
+      <div class="wheelCap" id="keyCap">&nbsp;</div>
+    </div>
+  </section>
+
+  <section class="panel">
     <div class="row">
       <label class="chk"><input type="checkbox" id="optPedal" checked>ペダルで音を保持</label>
       <label class="chk"><input type="checkbox" id="optChord" checked>コード名</label>
       <label class="chk"><input type="checkbox" id="optNames" checked>音名</label>
       <button id="btnPanic">全消音</button>
     </div>
-
     <div class="live">
-      <div class="wheelBox">
-        <svg id="wheel" viewBox="0 0 268 268" aria-label="調の選択（五度圏）"></svg>
-        <div class="wheelCap" id="keyCap">&nbsp;</div>
-      </div>
       <div class="staffBox"><svg id="staff" aria-label="いま鳴っている音"></svg></div>
       <div class="readout">
         <div class="chord" id="chordName">&nbsp;</div>
         <div class="notes" id="noteList">&nbsp;</div>
-        <div class="pedals" id="pedals"></div>
       </div>
     </div>
+  </section>
 
-    <div class="kbBox"><svg id="kb" viewBox="0 0 1196 142" preserveAspectRatio="xMidYMid meet"></svg></div>
-    <div class="hint">鍵盤はクリック／タップでも鳴らせます（ピアノが無くても表示を試せます）。青は指で押している音、黄はペダルで残っている音です。</div>
+  <section class="panel">
+    <div class="kbBox"><svg id="kb" viewBox="0 -86 1196 228" preserveAspectRatio="xMidYMid meet"></svg></div>
+    <div class="pedals" id="pedals"></div>
+    <div class="hint">上の棒は、いま鳴っている音のベロシティです（ペダルで残っている音も含みます）。青は指で押している音、黄はペダルで残っている音。鍵盤はクリック／タップでも鳴らせます。</div>
   </section>
 
   <section class="panel">
@@ -165,6 +191,7 @@
     <h2>ふりかえり</h2>
     <div class="row">
       <select id="takeSel" title="録音の一覧"></select>
+      <button id="btnRename" title="この録音の名前を変える">名前</button>
       <button id="btnPlay">▶ 再生</button>
       <label class="fld">出力 <select id="outSel" title="再生の出力先"></select></label>
       <span id="playStat" class="stat"></span>
@@ -176,15 +203,65 @@
     </div>
     <div class="stats" id="stats"></div>
     <div class="charts" id="charts"></div>
-    <div class="hint">グラフは横にドラッグで範囲を拡大、ダブルクリック（または「全体」）で戻ります。クリックした場所が再生の開始位置になります。<br>
+    <div class="hint" id="reviewHint">グラフは横にドラッグで範囲を拡大、ダブルクリック（または「全体」）で戻ります。クリックした場所が再生の開始位置になります。<br>
       「内蔵音」は初回だけ約2MBのピアノ音源を読み込みます（<a href="https://github.com/sfzinstruments/SalamanderGrandPiano" target="_blank" rel="noopener">Salamander Grand Piano</a> / Alexander Holm・CC-BY 3.0）。一度読めば次からは通信なしで鳴ります。</div>
   </section>
 
 </div>
 
+<!-- 確認・入力の窓。ブラウザ標準の confirm/prompt は、表示してくれない
+     ブラウザ（MIDIWeb Browser など WKWebView 系）があるので自前で出す -->
+<div class="modal" id="modal" hidden>
+  <div class="mbox" role="dialog" aria-modal="true">
+    <div class="mtitle" id="mTitle"></div>
+    <div class="mbody" id="mBody"></div>
+    <input class="minput" id="mInput" type="text" maxlength="60" hidden>
+    <div class="mrow">
+      <button id="mCancel">やめる</button>
+      <button id="mOk" class="primary">OK</button>
+    </div>
+  </div>
+</div>
+
 <script>
 "use strict";
 const $ = id => document.getElementById(id);
+
+/* 確認・入力の窓。標準の confirm/prompt は、出してくれないブラウザがある
+   （WKWebView 系。押しても何も起きずに false が返る）ため自前で用意する。
+   入力ありなら文字列、確認だけなら true、取り消しなら null を返す。 */
+function ask(opt){
+  return new Promise(resolve=>{
+    const m=$('modal'), inp=$('mInput'), ok=$('mOk'), cancel=$('mCancel');
+    $('mTitle').textContent=opt.title||'';
+    $('mBody').textContent=opt.body||'';
+    inp.hidden=!opt.input;
+    if(opt.input) inp.value=opt.value||'';
+    ok.textContent=opt.ok||'OK';
+    ok.className=opt.danger?'danger':'primary';
+    m.hidden=false;
+    if(opt.input) setTimeout(()=>{ inp.focus(); inp.select(); },30);
+    const done=v=>{
+      m.hidden=true;
+      ok.removeEventListener('click',onOk);
+      cancel.removeEventListener('click',onCancel);
+      m.removeEventListener('click',onBack);
+      document.removeEventListener('keydown',onKey);
+      resolve(v);
+    };
+    const onOk=()=>done(opt.input?inp.value.trim():true);
+    const onCancel=()=>done(null);
+    const onBack=e=>{ if(e.target===m) onCancel(); };
+    const onKey=e=>{
+      if(e.key==='Escape') onCancel();
+      else if(e.key==='Enter'&&opt.input) onOk();
+    };
+    ok.addEventListener('click',onOk);
+    cancel.addEventListener('click',onCancel);
+    m.addEventListener('click',onBack);
+    document.addEventListener('keydown',onKey);
+  });
+}
 const clamp = (v,a,b) => v<a?a:(v>b?b:v);
 const mod = (a,b) => ((a%b)+b)%b;
 
@@ -300,6 +377,7 @@ function drawWheel(){
 const S = {
   keyIdx:0, pedalHold:true, showChord:true, showNames:true,
   held:new Map(),          /* note -> velocity（指で押している） */
+  vel:new Map(),           /* note -> 表示用のベロシティ。鳴っている間の最大値 */
   pedHeld:new Set(),       /* 指は離したがダンパー／ソステヌートで鳴っている */
   sost:new Set(),          /* ソステヌートで捕まえた音 */
   cc:{64:0,66:0,67:0},
@@ -360,9 +438,17 @@ window.__inject = bytes => handleMessage(Uint8Array.from(bytes));
 /* ---- 発音モデル ---------------------------------------------------------
    指で押している音（held）と、離したがペダルで残っている音（pedHeld）を
    分けて持つ。楽譜と鍵盤はこの2つの和を「鳴っている音」として描く。       */
+/* 鳴らなくなった音のベロシティは捨てる。ペダルで残っている間は持ち続ける */
+function pruneVel(){
+  const snd=sounding();
+  for(const n of S.vel.keys()) if(!snd.has(n)) S.vel.delete(n);
+}
 function noteOn(n,v){
+  /* まだ鳴っているうちに弾き直したときは、大きいほうを残す */
+  const prev = sounding().has(n) ? (S.vel.get(n)||0) : 0;
   S.held.set(n,v);
   S.pedHeld.delete(n);
+  S.vel.set(n, Math.max(prev,v));
   rec({k:'on', a:n, b:v});
   renderLive();
 }
@@ -370,6 +456,7 @@ function noteOff(n){
   if(!S.held.has(n)) return;
   S.held.delete(n);
   if(damperDown() || S.sost.has(n)) S.pedHeld.add(n);
+  pruneVel();
   rec({k:'off', a:n, b:0});
   renderLive();
 }
@@ -388,10 +475,11 @@ function controlPedal(cc,v){
       if(!damperDown()) S.pedHeld.clear();
     }
   }
+  pruneVel();
   renderLive();
 }
 function panic(){
-  S.held.clear(); S.pedHeld.clear(); S.sost.clear();
+  S.held.clear(); S.pedHeld.clear(); S.sost.clear(); S.vel.clear();
   renderLive();
 }
 
@@ -406,17 +494,48 @@ const KW=23, KH=118, BW=13.2, BH=74, KTOP=4;
 const WHITES=[]; for(let n=KB_LO;n<=KB_HI;n++) if(!isBlack(mod(n,12))) WHITES.push(n);
 const whiteX = n => WHITES.indexOf(n)*KW;
 
+/* 鍵の中心。ベロシティの棒もここに合わせる */
+const keyCX = n => isBlack(mod(n,12)) ? whiteX(n-1)+BLACK_OFF[mod(n,12)]*KW : whiteX(n)+KW/2;
+const VEL_TOP=-66, VEL_BASE=-6;            /* ベロシティ棒の上端（127）と下端（0） */
+
 function drawKeyboard(){
   const snd=sounding();
   const fillOf=n=>{
     if(S.held.has(n)){
-      const v=S.held.get(n)||96;
+      const v=S.vel.get(n)||96;
       return {c:'var(--on)', o:(0.55+0.45*clamp(v/110,0,1)).toFixed(2)};
     }
     if(snd.has(n)) return {c:'var(--ped)', o:'0.80'};
     return null;
   };
   let s='';
+  /* ---- ベロシティの棒グラフ（鍵盤の真上）---- */
+  const vy = v => VEL_BASE-(clamp(v,0,127)/127)*(VEL_BASE-VEL_TOP);
+  for(const [lv,lab] of [[127,'127'],[96,''],[64,'64'],[32,''],[0,'0']]){
+    const y=vy(lv);
+    s+=`<line x1="18" y1="${y.toFixed(1)}" x2="1196" y2="${y.toFixed(1)}" stroke="var(--line)" `
+      +`stroke-width="0.8" opacity="${lv===0?1:0.7}"/>`;
+    if(lab) s+=`<text x="15" y="${y.toFixed(1)}" text-anchor="end" dominant-baseline="central" `
+      +`font-size="10" fill="var(--dim2)">${lab}</text>`;
+  }
+  let vmax=0, lastLabelX=-1e9;
+  for(const n of [...snd].sort((a,b)=>a-b)){
+    const v=S.vel.get(n)||0;
+    if(v>vmax) vmax=v;
+    const held=S.held.has(n), cx=keyCX(n), w=isBlack(mod(n,12))?9.5:13;
+    const y=vy(v);
+    s+=`<rect x="${(cx-w/2).toFixed(2)}" y="${y.toFixed(1)}" width="${w}" height="${(VEL_BASE-y).toFixed(1)}" `
+      +`rx="1.5" fill="${held?'var(--on)':'var(--ped)'}"/>`;
+    /* 数字は隣とぶつからないときだけ出す */
+    if(cx-lastLabelX>=24){
+      s+=`<text x="${cx.toFixed(2)}" y="${(y-3.5).toFixed(1)}" text-anchor="middle" font-size="10" `
+        +`fill="${held?'var(--on)':'var(--ped)'}">${v}</text>`;
+      lastLabelX=cx;
+    }
+  }
+  s+=`<text x="1193" y="${(VEL_TOP-12).toFixed(1)}" text-anchor="end" font-size="11" fill="var(--dim)">`
+    +`ベロシティ${vmax?`　いま最大 <tspan fill="var(--fg)" font-weight="600">${vmax}</tspan>`:''}</text>`;
+
   /* 白鍵 */
   for(const n of WHITES){
     const x=whiteX(n), f=fillOf(n);
@@ -428,7 +547,7 @@ function drawKeyboard(){
   for(let n=KB_LO;n<=KB_HI;n++){
     const pc=mod(n,12);
     if(!isBlack(pc)) continue;
-    const cx=whiteX(n-1)+BLACK_OFF[pc]*KW, f=fillOf(n);
+    const cx=keyCX(n), f=fillOf(n);
     s+=`<rect class="k" data-n="${n}" x="${cx-BW/2}" y="${KTOP}" width="${BW}" height="${BH}" rx="2.4" `
       +`fill="var(--kb)" stroke="var(--kedge)" stroke-width="0.8"/>`;
     if(f) s+=`<rect x="${cx-BW/2}" y="${KTOP}" width="${BW}" height="${BH}" rx="2.4" fill="${f.c}" opacity="${f.o}" pointer-events="none"/>`;
@@ -465,7 +584,7 @@ function drawKeyboard(){
 const SP=9, HS=SP/2;              /* 五線の間隔と、その半分（＝1段） */
 const TREB_E4_Y=126;              /* 高音部譜表の下線 E4 */
 const BASS_G2_Y=198;              /* 低音部譜表の下線 G2 */
-const STAFF_X0=14, STAFF_X1=300;
+const STAFF_X0=14, STAFF_X1=270;
 const yTreble = step => TREB_E4_Y-(step-30)*HS;
 const yBass   = step => BASS_G2_Y-(step-18)*HS;
 /* 表示範囲は固定。どの調でも 88鍵の両端（A0・C8）が最初から収まる高さにして
@@ -656,9 +775,11 @@ function chordName(){
 function drawPedals(){
   const rows=[[64,'ダンパー'],[66,'ソステヌート'],[67,'ソフト']].filter(([c])=>S.seenCC[c]);
   $('pedals').innerHTML = rows.map(([c,nm])=>{
-    const v=S.cc[c], p=(v/127*100).toFixed(0), down=v>=64;
+    const v=S.cc[c], p=(v/127*100).toFixed(1), down=v>=64;
     return `<div class="pd${down?' down':''}"><span class="nm">${nm}</span>`
-         + `<span class="bar"><i style="width:${p}%"></i></span><span class="vv">${v}</span></div>`;
+         + `<span class="bar" title="64 以上で「踏んでいる」"><i style="width:${p}%"></i>`
+         + `<u style="left:${(64/127*100).toFixed(1)}%"></u></span>`
+         + `<span class="vv">${v}</span></div>`;
   }).join('');
 }
 /* ペダルは連続値が毎秒何十回も飛んでくる。1メッセージ1描画では重いので、
@@ -722,17 +843,19 @@ function stopRec(){
   for(const n of open) ev.push({t:dur,k:'off',a:n,b:0});
   ev.sort((a,b)=>a.t-b.t);
   if(!ev.length){ $('recStat').textContent='何も記録されませんでした'; $('recStat').className='stat'; return; }
-  const d=new Date();
-  const take={
-    id:'t'+d.getTime(),
-    name:`${d.getMonth()+1}/${d.getDate()} ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')} (${fmtTime(dur)})`,
-    dur, events:ev,
-  };
+  const at=Date.now();
+  const take={ id:'t'+at, at, name:takeLabel(at), dur, events:ev };
   S.takes.unshift(take); S.curId=take.id; S.view=null;
   saveTakes(); refreshTakes(); renderTake();
   $('recStat').textContent='録音しました'; $('recStat').className='stat ok';
 }
 const curTake = () => S.takes.find(t=>t.id===S.curId)||null;
+
+/* 名前の初期値は録音した日時。あとから好きな名前に変えられる */
+function takeLabel(at){
+  const d=new Date(at), p=n=>String(n).padStart(2,'0');
+  return `${d.getMonth()+1}/${d.getDate()} ${p(d.getHours())}:${p(d.getMinutes())}`;
+}
 
 function fmtTime(ms){
   const s=Math.max(0,ms)/1000, m=Math.floor(s/60), r=s-m*60;
@@ -744,7 +867,7 @@ function refreshTakes(){
     ? S.takes.map(t=>`<option value="${t.id}"${t.id===S.curId?' selected':''}>${t.name}</option>`).join('')
     : '<option value="">録音なし</option>';
   const none=!S.takes.length;
-  for(const id of ['btnMid','btnJson','btnDel','btnZoomOut','btnPlay']) $(id).disabled=none;
+  for(const id of ['btnMid','btnJson','btnDel','btnZoomOut','btnPlay','btnRename']) $(id).disabled=none;
 }
 
 /* =======================================================================
@@ -847,6 +970,7 @@ function renderTake(){
   take._a=A;
   const st=A.stat;
   $('stats').innerHTML=[
+    ...(take.at?[['録音日時',new Date(take.at).toLocaleString('ja-JP',{month:'numeric',day:'numeric',hour:'2-digit',minute:'2-digit'})]]:[]),
     ['演奏時間',fmtTime(A.dur)],
     ['音数',st.notes+' 音'],
     ['音数／秒',st.nps.toFixed(1)],
@@ -1407,7 +1531,11 @@ function download(name,blob){
   a.href=url; a.download=name; document.body.appendChild(a); a.click();
   setTimeout(()=>{ URL.revokeObjectURL(url); a.remove(); },0);
 }
-const safeName=t=>'piano_'+t.name.replace(/[^0-9]+/g,'_').replace(/^_|_$/g,'');
+/* 書き出すファイル名。名前は自由に付けられるので、使えない文字だけ落とす */
+function safeName(t){
+  const n=(t.name||'').replace(/[\\/:*?"<>|]/g,'-').replace(/\s+/g,'_').replace(/^_+|_+$/g,'');
+  return ('piano_'+(n||takeLabel(t.at||Date.now()).replace(/\D+/g,'-'))).slice(0,80);
+}
 
 /* =======================================================================
    保存（設定と録音を localStorage に置く。入りきらなければ古い順に捨てる）
@@ -1427,7 +1555,7 @@ function loadOpts(){
   }catch(e){}
 }
 function saveTakes(){
-  const takes=S.takes.map(t=>({id:t.id,name:t.name,dur:t.dur,events:t.events}));
+  const takes=S.takes.map(t=>({id:t.id,at:t.at,name:t.name,dur:t.dur,events:t.events}));
   while(takes.length){
     try{ localStorage.setItem(LS+'takes',JSON.stringify(takes)); return; }
     catch(e){ takes.pop(); }                 /* 容量オーバー。古いものから捨てる */
@@ -1474,9 +1602,19 @@ $('btnMid').addEventListener('click',()=>{ const t=curTake(); if(t) download(saf
 $('btnJson').addEventListener('click',()=>{ const t=curTake(); if(!t) return;
   download(safeName(t)+'.json',new Blob([JSON.stringify({name:t.name,dur:t.dur,events:t.events},null,1)],{type:'application/json'})); });
 $('btnZoomOut').addEventListener('click',()=>{ S.view=null; if(CHARTS.length) drawCharts(); });
-$('btnDel').addEventListener('click',()=>{
+$('btnRename').addEventListener('click',async ()=>{
   const t=curTake(); if(!t) return;
-  if(!confirm(`「${t.name}」を削除します。よろしいですか？`)) return;
+  const v=await ask({title:'録音の名前', body:'曲名やメモを入れておくと、あとで探しやすくなります。',
+                     input:true, value:t.name, ok:'保存'});
+  if(v===null) return;
+  t.name = v || takeLabel(t.at||+t.id.slice(1)||Date.now());
+  saveTakes(); refreshTakes(); renderTake();
+});
+$('btnDel').addEventListener('click',async ()=>{
+  const t=curTake(); if(!t) return;
+  const yes=await ask({title:'この録音を削除しますか？', body:`「${t.name}」　もとに戻せません。`,
+                       ok:'削除する', danger:true});
+  if(!yes) return;
   stopPlay();
   S.takes=S.takes.filter(x=>x.id!==t.id);
   S.curId=S.takes.length?S.takes[0].id:null; S.view=null; seekPos=0;

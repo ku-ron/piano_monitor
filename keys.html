@@ -1,0 +1,341 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#12141a">
+<title>鍵盤だけ — ピアノ演奏モニタ</title>
+<style>
+  :root{
+    --bg:#12141a; --panel:#1a1d26; --panel2:#232733; --line:#2f3444;
+    --fg:#e6e9f0; --dim:#8b93a7; --dim2:#5f677a;
+    --accent:#5cc8ff; --ok:#5ddba0; --warn:#ffcc66; --ng:#ff7b7b;
+    --kw:#eceef4; --kb:#20242e; --kedge:#0d0f14;
+    --on:#5cc8ff;          /* 指で押している */
+    --ped:#ffcc66;         /* ペダルで残っている */
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;padding:0;height:100%}
+  body{
+    background:var(--bg); color:var(--fg);
+    font-family:-apple-system,BlinkMacSystemFont,"Hiragino Sans","Noto Sans JP",sans-serif;
+    font-size:15px; line-height:1.5;
+    display:flex; flex-direction:column; overflow:hidden;
+  }
+  /* 配信ソフトに重ねるとき用。ページの地を透明にする。
+     下に何が映るか分からないので、文字と線には縁取りを付けて読めるようにする */
+  body.clear{background:transparent}
+  body.clear #stage{background:transparent;border:0;box-shadow:none}
+  body.clear #kb text{paint-order:stroke;stroke:#000000b0;stroke-width:2.6px;stroke-linejoin:round}
+  body.clear #kb line{stroke:#ffffff88}
+  body.clear .pd{color:#fff;text-shadow:0 1px 3px #000,0 0 2px #000}
+  body.clear .pd .vv{color:#fff}
+  body.clear .pd .bar{background:#00000066;box-shadow:0 0 0 1px #0006}
+
+  #bar{
+    display:flex;align-items:center;gap:10px;flex-wrap:wrap;
+    padding:8px 12px;background:#0d0f14ee;border-bottom:1px solid var(--line);
+    transition:opacity .25s; flex:0 0 auto;
+  }
+  body.hidebar #bar{opacity:0;pointer-events:none}
+  body.nobar #bar{display:none}
+  button{
+    background:var(--panel2);color:var(--fg);border:1px solid var(--line);
+    border-radius:8px;padding:7px 12px;font-size:14px;font-family:inherit;cursor:pointer;min-height:36px;
+  }
+  button.primary{background:var(--accent);color:#06202c;border-color:var(--accent);font-weight:600}
+  button:disabled{opacity:.4;cursor:default}
+  label.chk{display:inline-flex;align-items:center;gap:5px;color:var(--dim);font-size:13px;cursor:pointer}
+  input[type=checkbox]{width:16px;height:16px;accent-color:var(--accent)}
+  .stat{font-size:13px;color:var(--dim)}
+  .stat.ok{color:var(--ok)} .stat.ng{color:var(--ng)} .stat.warn{color:var(--warn)}
+  .sp{flex:1 1 auto}
+  .tip{font-size:11.5px;color:var(--dim2)}
+  .tip code{background:var(--panel2);border-radius:4px;padding:1px 5px;color:var(--dim)}
+
+  #stage{
+    flex:1 1 auto;min-height:0;display:flex;flex-direction:column;justify-content:flex-end;
+    gap:8px;padding:10px 12px 12px;background:var(--bg);
+  }
+  #kb{display:block;width:100%;flex:1 1 auto;min-height:0;touch-action:none}
+  #pedals{display:flex;flex-direction:column;gap:6px;flex:0 0 auto}
+  body.noped #pedals{display:none}
+  .pd{display:flex;align-items:center;gap:10px;font-size:12px;color:var(--dim)}
+  .pd .nm{width:6.4em;flex:0 0 auto}
+  .pd .bar{flex:1 1 auto;height:14px;background:#232733cc;border-radius:7px;position:relative;overflow:hidden}
+  .pd .bar i{display:block;height:100%;background:var(--dim2);border-radius:7px;transition:width .05s linear}
+  .pd .bar u{position:absolute;top:0;bottom:0;width:1px;background:var(--dim2);opacity:.75}
+  .pd.down .bar i{background:var(--ped)}
+  .pd .vv{width:2.6em;text-align:right;font-variant-numeric:tabular-nums;flex:0 0 auto;color:var(--fg)}
+</style>
+</head>
+<body>
+
+<div id="bar">
+  <button id="btnConnect" class="primary">MIDIに接続</button>
+  <span id="status" class="stat">未接続</span>
+  <label class="chk"><input type="checkbox" id="optVel" checked>ベロシティ</label>
+  <label class="chk"><input type="checkbox" id="optPed" checked>ペダル</label>
+  <label class="chk"><input type="checkbox" id="optClear">背景を透明に</label>
+  <button id="btnPanic">全消音</button>
+  <span class="sp"></span>
+  <span class="tip">配信ソフトに入れるときは <code>keys.html?clear=1&amp;bar=0</code> のように付けると、透明背景でこのバーごと消せます</span>
+</div>
+
+<div id="stage">
+  <svg id="kb" preserveAspectRatio="xMidYMax meet" aria-label="鍵盤"></svg>
+  <div id="pedals"></div>
+</div>
+
+<script>
+"use strict";
+/* =======================================================================
+   鍵盤とダンパーペダルだけを出すページ。配信ソフト（OBSなど）の
+   ブラウザソースに入れて、演奏の手元を映すのが目的。
+   本体（index.html）から、MIDIの受け取りと発音の考え方だけを持ってきている。
+   ======================================================================= */
+const $ = id => document.getElementById(id);
+const clamp = (v,a,b) => v<a?a:(v>b?b:v);
+const mod = (a,b) => ((a%b)+b)%b;
+
+const Q=new URLSearchParams(location.search);
+const qb=(k,d)=>Q.has(k)?!/^(0|false|no)$/i.test(Q.get(k)):d;
+
+const S={
+  held:new Map(),        /* note -> velocity（指で押している） */
+  vel:new Map(),         /* note -> 表示するベロシティ。鳴っている間の最大値 */
+  pedHeld:new Set(),     /* 指は離したが、ペダルで鳴っている */
+  sost:new Set(),
+  cc:{64:0,66:0,67:0},
+  seenCC:{64:true,66:false,67:false},
+  showVel:true, showPed:true, clear:false,
+};
+const damperDown = () => S.cc[64]>=64;
+const sounding = () => { const s=new Set(S.held.keys()); for(const n of S.pedHeld) s.add(n); return s; };
+
+/* ===== MIDI ===== */
+let midi=null;
+const setStatus=(t,c)=>{ const e=$('status'); e.textContent=t; e.className='stat'+(c?' '+c:''); };
+async function connectMidi(auto){
+  if(!navigator.requestMIDIAccess){
+    setStatus('このブラウザは Web MIDI API に非対応です','ng');
+    $('btnConnect').disabled=true; return;
+  }
+  if(!auto) setStatus('接続中…');
+  try{ midi=await navigator.requestMIDIAccess({sysex:false}); }
+  catch(e){
+    /* 自動接続は、許可がまだのときに黙って失敗する。ボタンを押してもらう */
+    if(!auto) setStatus('MIDIへのアクセスが拒否されました: '+e.message,'ng');
+    return;
+  }
+  midi.onstatechange=attachMidi;
+  attachMidi();
+  $('btnConnect').disabled=true;
+  armHide();
+}
+function attachMidi(){
+  const names=[];
+  for(const i of midi.inputs.values()){ i.onmidimessage=ev=>handleMessage(ev.data); names.push(i.name); }
+  if(!names.length) setStatus('入力デバイスが見つかりません','warn');
+  else setStatus('接続済み：'+names.join(' / '),'ok');
+}
+function handleMessage(data){
+  const st=data[0];
+  if(st>=0xF0) return;
+  if((st&0x0F)===9) return;                     /* ch10 はドラム。捨てる */
+  const type=st&0xF0, d1=data[1], d2=data[2];
+  if(type===0x90&&d2>0) noteOn(d1,d2);
+  else if(type===0x80||(type===0x90&&d2===0)) noteOff(d1);
+  else if(type===0xB0){
+    if(d1===64||d1===66||d1===67) controlPedal(d1,d2);
+    else if(d1===120||d1===123) panic();
+  }
+}
+window.__inject = b => handleMessage(Uint8Array.from(b));
+
+/* ===== 発音のモデル（本体と同じ） ===== */
+function pruneVel(){
+  const snd=sounding();
+  for(const n of S.vel.keys()) if(!snd.has(n)) S.vel.delete(n);
+}
+function noteOn(n,v){
+  const prev = sounding().has(n) ? (S.vel.get(n)||0) : 0;
+  S.held.set(n,v); S.pedHeld.delete(n);
+  S.vel.set(n, Math.max(prev,v));               /* 鳴っている間は大きいほうを残す */
+  render();
+}
+function noteOff(n){
+  if(!S.held.has(n)) return;
+  S.held.delete(n);
+  if(damperDown()||S.sost.has(n)) S.pedHeld.add(n);
+  pruneVel(); render();
+}
+function controlPedal(cc,v){
+  const prev=S.cc[cc];
+  S.cc[cc]=v; S.seenCC[cc]=true;
+  if(cc===64 && prev>=64 && v<64)
+    for(const n of [...S.pedHeld]) if(!S.sost.has(n)) S.pedHeld.delete(n);
+  if(cc===66){
+    if(prev<64&&v>=64) S.sost=new Set(S.held.keys());
+    else if(prev>=64&&v<64){ S.sost.clear(); if(!damperDown()) S.pedHeld.clear(); }
+  }
+  pruneVel(); render();
+}
+function panic(){ S.held.clear(); S.pedHeld.clear(); S.sost.clear(); S.vel.clear(); render(); }
+
+/* ===== 鍵盤（88鍵 A0=21〜C8=108） ===== */
+const KB_LO=21, KB_HI=108;
+const isBlack = pc => pc===1||pc===3||pc===6||pc===8||pc===10;
+const BLACK_OFF = {1:0.89, 3:1.11, 6:0.85, 8:1.00, 10:1.15};
+const KW=23, KH=118, BW=13.2, BH=74, KTOP=4;
+const WHITES=[]; for(let n=KB_LO;n<=KB_HI;n++) if(!isBlack(mod(n,12))) WHITES.push(n);
+const whiteX = n => WHITES.indexOf(n)*KW;
+const keyCX = n => isBlack(mod(n,12)) ? whiteX(n-1)+BLACK_OFF[mod(n,12)]*KW : whiteX(n)+KW/2;
+const VEL_TOP=-126, VEL_BASE=-6;
+
+function drawKeyboard(){
+  const snd=sounding();
+  const vb = S.showVel ? '0 -146 1196 288' : '0 -6 1196 148';
+  $('kb').setAttribute('viewBox',vb);
+  const fillOf=n=>{
+    if(S.held.has(n)){
+      const v=S.vel.get(n)||96;
+      return {c:'var(--on)', o:(0.55+0.45*clamp(v/110,0,1)).toFixed(2)};
+    }
+    if(snd.has(n)) return {c:'var(--ped)', o:'0.80'};
+    return null;
+  };
+  let s='';
+  if(S.showVel){
+    const vy = v => VEL_BASE-(clamp(v,0,127)/127)*(VEL_BASE-VEL_TOP);
+    for(const [lv,lab] of [[127,'127'],[96,''],[64,'64'],[32,''],[0,'0']]){
+      const y=vy(lv);
+      s+=`<line x1="18" y1="${y.toFixed(1)}" x2="1196" y2="${y.toFixed(1)}" stroke="var(--line)" `
+        +`stroke-width="0.8" opacity="${lv===0?1:0.7}"/>`;
+      if(lab) s+=`<text x="15" y="${y.toFixed(1)}" text-anchor="end" dominant-baseline="central" `
+        +`font-size="10" fill="var(--dim2)">${lab}</text>`;
+    }
+    let vmax=0, lastX=-1e9;
+    for(const n of [...snd].sort((a,b)=>a-b)){
+      const v=S.vel.get(n)||0;
+      if(v>vmax) vmax=v;
+      const held=S.held.has(n), cx=keyCX(n), w=isBlack(mod(n,12))?9.5:13, y=vy(v);
+      s+=`<rect x="${(cx-w/2).toFixed(2)}" y="${y.toFixed(1)}" width="${w}" height="${(VEL_BASE-y).toFixed(1)}" `
+        +`rx="1.5" fill="${held?'var(--on)':'var(--ped)'}"/>`;
+      if(cx-lastX>=24){
+        s+=`<text x="${cx.toFixed(2)}" y="${(y-3.5).toFixed(1)}" text-anchor="middle" font-size="10" `
+          +`fill="${held?'var(--on)':'var(--ped)'}">${v}</text>`;
+        lastX=cx;
+      }
+    }
+    s+=`<text x="1193" y="${(VEL_TOP-12).toFixed(1)}" text-anchor="end" font-size="11" fill="var(--dim)">`
+      +`ベロシティ${vmax?`　いま最大 <tspan fill="var(--fg)" font-weight="600">${vmax}</tspan>`:''}</text>`;
+  }
+  for(const n of WHITES){
+    const x=whiteX(n), f=fillOf(n);
+    s+=`<rect class="k" data-n="${n}" x="${x+0.6}" y="${KTOP}" width="${KW-1.2}" height="${KH}" rx="3" `
+      +`fill="var(--kw)" stroke="var(--kedge)" stroke-width="0.8"/>`;
+    if(f) s+=`<rect x="${x+0.6}" y="${KTOP}" width="${KW-1.2}" height="${KH}" rx="3" fill="${f.c}" opacity="${f.o}" pointer-events="none"/>`;
+  }
+  for(let n=KB_LO;n<=KB_HI;n++){
+    const pc=mod(n,12);
+    if(!isBlack(pc)) continue;
+    const cx=keyCX(n), f=fillOf(n);
+    s+=`<rect class="k" data-n="${n}" x="${cx-BW/2}" y="${KTOP}" width="${BW}" height="${BH}" rx="2.4" `
+      +`fill="var(--kb)" stroke="var(--kedge)" stroke-width="0.8"/>`;
+    if(f) s+=`<rect x="${cx-BW/2}" y="${KTOP}" width="${BW}" height="${BH}" rx="2.4" fill="${f.c}" opacity="${f.o}" pointer-events="none"/>`;
+  }
+  for(let n=24;n<=108;n+=12){
+    const x=whiteX(n)+KW/2;
+    s+=`<text x="${x}" y="${KTOP+KH+16}" text-anchor="middle" font-size="11" `
+      +`fill="${n===60?'var(--accent)':'var(--dim2)'}" font-weight="${n===60?600:400}">C${n/12-1}</text>`;
+  }
+  $('kb').innerHTML=s;
+}
+function drawPedals(){
+  const rows=[[64,'ダンパー'],[66,'ソステヌート'],[67,'ソフト']].filter(([c])=>S.seenCC[c]);
+  $('pedals').innerHTML = rows.map(([c,nm])=>{
+    const v=S.cc[c], p=(v/127*100).toFixed(1), down=v>=64;
+    return `<div class="pd${down?' down':''}"><span class="nm">${nm}</span>`
+         + `<span class="bar"><i style="width:${p}%"></i><u style="left:${(64/127*100).toFixed(1)}%"></u></span>`
+         + `<span class="vv">${v}</span></div>`;
+  }).join('');
+}
+/* ペダルは連続値が毎秒何十回も来るので、描画は次の画面更新までまとめる */
+let raf=false;
+function render(){
+  if(raf) return;
+  raf=true;
+  requestAnimationFrame(()=>{ raf=false; drawKeyboard(); drawPedals(); });
+}
+
+/* ===== 鍵盤のクリック（ピアノが無いときの確認用） ===== */
+(function(){
+  const kb=$('kb'), down=new Map();
+  kb.addEventListener('pointerdown',ev=>{
+    const t=ev.target.closest&&ev.target.closest('.k'); if(!t) return;
+    ev.preventDefault(); kb.setPointerCapture(ev.pointerId);
+    down.set(ev.pointerId,+t.dataset.n); noteOn(+t.dataset.n,80);
+  });
+  const up=ev=>{ const n=down.get(ev.pointerId); if(n==null) return; down.delete(ev.pointerId); noteOff(n); };
+  kb.addEventListener('pointerup',up);
+  kb.addEventListener('pointercancel',up);
+})();
+
+/* ===== 操作バー：つながったあと、マウスが止まっていれば隠す ===== */
+let hideT=null;
+function armHide(){
+  clearTimeout(hideT);
+  document.body.classList.remove('hidebar');
+  if(!midi) return;                       /* まだ接続していないうちは出しておく */
+  hideT=setTimeout(()=>document.body.classList.add('hidebar'), 2500);
+}
+addEventListener('mousemove',armHide);
+addEventListener('touchstart',armHide);
+
+/* ===== 設定 ===== */
+const LS='pm.keys.';
+function applyOpts(){
+  document.body.classList.toggle('clear', S.clear);
+  document.body.classList.toggle('noped', !S.showPed);
+  $('optVel').checked=S.showVel;
+  $('optPed').checked=S.showPed;
+  $('optClear').checked=S.clear;
+  render();
+}
+function saveOpts(){
+  try{ localStorage.setItem(LS+'opts',JSON.stringify(
+    {showVel:S.showVel, showPed:S.showPed, clear:S.clear})); }catch(e){}
+}
+(function loadOpts(){
+  try{
+    const o=JSON.parse(localStorage.getItem(LS+'opts')||'{}');
+    if(typeof o.showVel==='boolean') S.showVel=o.showVel;
+    if(typeof o.showPed==='boolean') S.showPed=o.showPed;
+    if(typeof o.clear==='boolean') S.clear=o.clear;
+  }catch(e){}
+  /* URL のほうが強い。配信ソフトには ?clear=1&bar=0 のように渡す */
+  S.showVel=qb('vel',S.showVel);
+  S.showPed=qb('pedal',S.showPed);
+  S.clear=qb('clear',S.clear);
+  if(!qb('bar',true)) document.body.classList.add('nobar');
+})();
+
+$('btnConnect').addEventListener('click',()=>connectMidi(false));
+$('btnPanic').addEventListener('click',panic);
+$('optVel').addEventListener('change',e=>{ S.showVel=e.target.checked; saveOpts(); applyOpts(); });
+$('optPed').addEventListener('change',e=>{ S.showPed=e.target.checked; saveOpts(); applyOpts(); });
+$('optClear').addEventListener('change',e=>{ S.clear=e.target.checked; saveOpts(); applyOpts(); });
+addEventListener('resize',render);
+
+applyOpts();
+if(!navigator.requestMIDIAccess){
+  setStatus('このブラウザは Web MIDI API に非対応です','ng');
+  $('btnConnect').disabled=true;
+}else{
+  /* すでに許可されていれば、開いただけでつながる（配信ソフト用） */
+  connectMidi(true);
+}
+</script>
+</body>
+</html>

@@ -37,6 +37,7 @@
   .topbar{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin:2px 0 8px}
   h1{font-size:17px;margin:0;font-weight:600;flex:0 0 auto}
   .topbar .stat{flex:1 1 auto;min-width:0}
+  .topbar .sub{font-size:12px;color:var(--dim);flex:0 0 auto;white-space:nowrap}
   .panel{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:10px;margin-bottom:10px}
   .panel h2{font-size:12px;margin:0 0 8px;color:var(--dim);font-weight:600;letter-spacing:.06em}
   .row{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
@@ -189,6 +190,7 @@
     <h1>ピアノ演奏モニタ</h1>
     <button id="btnConnect" class="primary">MIDIに接続</button>
     <span id="status" class="stat">未接続 — ボタンを押して電子ピアノとつないでください</span>
+    <a class="sub" href="keys.html" title="鍵盤とペダルだけのページ。配信ソフトに入れる用">鍵盤だけ ↗</a>
   </div>
 
   <section class="panel">

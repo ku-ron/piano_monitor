@@ -101,6 +101,7 @@
          display:flex;flex-direction:column;gap:4px;align-self:stretch}
   .pcBox svg{display:block;width:100%;flex:1 1 0;min-height:80px}
   .pcBox .lbl{margin-bottom:0}
+  .pcBox .reset{width:100%;min-height:36px;font-size:13px;color:var(--dim);margin-bottom:2px}
   .winRow{display:flex;align-items:center;gap:8px;font-size:12px;color:var(--dim);margin-top:6px;flex-wrap:wrap}
   .winRow .t{white-space:nowrap}
   .winRow b{color:var(--fg);font-variant-numeric:tabular-nums;min-width:2.4em;text-align:right}
@@ -212,8 +213,6 @@
       <label class="chk"><input type="checkbox" id="optPedal" checked>ペダルで音を保持</label>
       <label class="chk"><input type="checkbox" id="optChord" checked>コード名</label>
       <label class="chk"><input type="checkbox" id="optNames" checked>音名</label>
-      <button id="btnPanic">全消音</button>
-      <button id="btnResetPc" title="調号の候補もいっしょにリセットします">集計をリセット</button>
     </div>
     <div class="live">
       <div class="staffBox"><svg id="staff" aria-label="いま鳴っている音"></svg></div>
@@ -222,6 +221,7 @@
         <div class="notes" id="noteList">&nbsp;</div>
       </div>
       <div class="pcBox">
+        <button id="btnResetPc" class="reset" title="調号の候補もいっしょにリセットします">集計をリセット</button>
         <div class="lbl">音の使われ方（最大を1とした割合）</div>
         <svg id="pcChart" viewBox="0 0 304 132" aria-label="ピッチクラスごとの割合"></svg>
         <label class="winRow"><span class="t">直前 <b id="winVal">48</b> 音から集計</span>
@@ -472,9 +472,12 @@ async function connectMidi(){
   attachMidi();
   $('btnConnect').disabled = true;
 }
-function attachMidi(){
+function attachMidi(ev){
+  /* 押している途中で機器が切れると、ノートオフが来ないまま鍵が光り続ける。
+     切断を見たら表示を白紙に戻す（Bluetooth MIDI では時々起きる） */
+  if(ev && ev.port && ev.port.state==='disconnected') panic();
   const names=[];
-  for(const i of midi.inputs.values()){ i.onmidimessage = ev=>handleMessage(ev.data); names.push(i.name); }
+  for(const i of midi.inputs.values()){ i.onmidimessage = e=>handleMessage(e.data); names.push(i.name); }
   refreshOutputs();
   if(!names.length) setStatus('入力デバイスが見つかりません（電源・Bluetooth MIDI のペアリングを確認）','warn');
   else setStatus('接続済み：'+names.join(' / '),'ok');
@@ -1748,7 +1751,6 @@ $('winSel').addEventListener('input',e=>{
 $('optPedal').addEventListener('change',e=>{ S.pedalHold=e.target.checked; saveOpts(); renderLive(); });
 $('optChord').addEventListener('change',e=>{ S.showChord=e.target.checked; saveOpts(); renderLive(); });
 $('optNames').addEventListener('change',e=>{ S.showNames=e.target.checked; saveOpts(); renderLive(); });
-$('btnPanic').addEventListener('click',panic);
 
 $('btnRec').addEventListener('click',()=>{ if(PB.playing) stopPlay(); S.recording?stopRec():startRec(); });
 $('btnPlay').addEventListener('click',()=>{ PB.playing?stopPlay():startPlay(seekPos); });

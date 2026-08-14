@@ -58,6 +58,14 @@
     gap:8px;padding:10px 12px 12px;background:var(--bg);
   }
   #kb{display:block;width:100%;flex:1 1 auto;min-height:0;touch-action:none}
+  /* 流れる表示。鍵盤の真上の余っている場所を全部使う */
+  #flow{display:none;width:100%;flex:1 1 auto;min-height:60px}
+  body.flowon #flow{display:block}
+  body.flowon #kb{flex:0 1 auto;height:auto;max-height:62%}
+  #spdWrap{display:none}
+  body.flowon #spdWrap{display:inline-flex}
+  #spdWrap input[type=range]{width:110px;accent-color:var(--accent)}
+  #spdWrap b{color:var(--fg);font-variant-numeric:tabular-nums;min-width:2.2em;text-align:right}
   #pedals{display:flex;flex-direction:column;gap:6px;flex:0 0 auto}
   body.noped #pedals{display:none}
   .pd{display:flex;align-items:center;gap:10px;font-size:12px;color:var(--dim)}
@@ -74,15 +82,19 @@
 <div id="bar">
   <button id="btnConnect" class="primary">MIDIに接続</button>
   <span id="status" class="stat">未接続</span>
+  <label class="chk"><input type="checkbox" id="optFlow">流れる表示</label>
+  <label class="chk" id="spdWrap">速さ
+    <input type="range" id="flowSpd" min="10" max="80" step="1" value="30">
+    <b id="spdVal">3.0</b>秒</label>
   <label class="chk"><input type="checkbox" id="optVel" checked>ベロシティ</label>
   <label class="chk"><input type="checkbox" id="optPed" checked>ペダル</label>
   <label class="chk"><input type="checkbox" id="optClear">背景を透明に</label>
-  <button id="btnPanic">全消音</button>
   <span class="sp"></span>
   <span class="tip">配信ソフトに入れるときは <code>keys.html?clear=1&amp;bar=0</code> のように付けると、透明背景でこのバーごと消せます</span>
 </div>
 
 <div id="stage">
+  <canvas id="flow"></canvas>
   <svg id="kb" preserveAspectRatio="xMidYMax meet" aria-label="鍵盤"></svg>
   <div id="pedals"></div>
 </div>
@@ -109,6 +121,7 @@ const S={
   cc:{64:0,66:0,67:0},
   seenCC:{64:true,66:false,67:false},
   showVel:true, showPed:true, clear:false,
+  flow:false, flowSec:3.0,      /* 流れる表示と、上まで流れきる時間（秒） */
 };
 const damperDown = () => S.cc[64]>=64;
 const sounding = () => { const s=new Set(S.held.keys()); for(const n of S.pedHeld) s.add(n); return s; };
@@ -133,9 +146,12 @@ async function connectMidi(auto){
   $('btnConnect').disabled=true;
   armHide();
 }
-function attachMidi(){
+function attachMidi(ev){
+  /* 押している途中で機器が切れると、ノートオフが来ないまま鍵が光り続ける。
+     切断を見たら表示を白紙に戻す（Bluetooth MIDI では時々起きる） */
+  if(ev && ev.port && ev.port.state==='disconnected') panic();
   const names=[];
-  for(const i of midi.inputs.values()){ i.onmidimessage=ev=>handleMessage(ev.data); names.push(i.name); }
+  for(const i of midi.inputs.values()){ i.onmidimessage=e=>handleMessage(e.data); names.push(i.name); }
   if(!names.length) setStatus('入力デバイスが見つかりません','warn');
   else setStatus('接続済み：'+names.join(' / '),'ok');
 }
@@ -162,13 +178,14 @@ function noteOn(n,v){
   const prev = sounding().has(n) ? (S.vel.get(n)||0) : 0;
   S.held.set(n,v); S.pedHeld.delete(n);
   S.vel.set(n, Math.max(prev,v));               /* 鳴っている間は大きいほうを残す */
-  render();
+  if(S.flow){ endRibbon(n); startRibbon(n,v,COL_ON); }   /* 弾き直しは帯を区切る */
+  syncRibbons(); render();
 }
 function noteOff(n){
   if(!S.held.has(n)) return;
   S.held.delete(n);
   if(damperDown()||S.sost.has(n)) S.pedHeld.add(n);
-  pruneVel(); render();
+  pruneVel(); syncRibbons(); render();
 }
 function controlPedal(cc,v){
   const prev=S.cc[cc];
@@ -179,9 +196,97 @@ function controlPedal(cc,v){
     if(prev<64&&v>=64) S.sost=new Set(S.held.keys());
     else if(prev>=64&&v<64){ S.sost.clear(); if(!damperDown()) S.pedHeld.clear(); }
   }
-  pruneVel(); render();
+  pruneVel(); syncRibbons(); render();
 }
-function panic(){ S.held.clear(); S.pedHeld.clear(); S.sost.clear(); S.vel.clear(); render(); }
+function panic(){
+  S.held.clear(); S.pedHeld.clear(); S.sost.clear(); S.vel.clear();
+  for(const r of ribbons) if(r.t1===null) r.t1=performance.now();
+  live.clear();
+  render();
+}
+
+/* =======================================================================
+   流れる表示（音ゲー風）
+   弾いている間ずっと帯が伸び、離すと下端も動きだして上へ流れていく。
+   指で押している間は青、ペダルだけで残っている間は黄。色が変わる境目で
+   帯を1本区切ることで、1本の帯を塗り分けずに済ませている。
+   ======================================================================= */
+const COL_ON='#5cc8ff', COL_PED='#ffcc66';
+const ribbons=[];                 /* {n,x,w,col,t0,t1} t1=null なら伸びている最中 */
+const live=new Map();             /* note -> いま伸ばしている帯 */
+let flowRaf=null, G=null;
+
+/* 鳴っている音と帯を合わせる。ペダルに移ったら色が変わるので、そこで区切る */
+function syncRibbons(){
+  if(!S.flow){ live.clear(); return; }
+  const snd=sounding();
+  for(const [n,r] of [...live]){
+    if(!snd.has(n)){ endRibbon(n); continue; }
+    const want = S.held.has(n) ? COL_ON : COL_PED;
+    if(r.col!==want){ endRibbon(n); startRibbon(n, S.vel.get(n)||90, want); }
+  }
+  for(const n of snd) if(!live.has(n)) startRibbon(n, S.vel.get(n)||90, S.held.has(n)?COL_ON:COL_PED);
+}
+
+function ribbonBox(n){
+  const pc=mod(n,12);
+  return isBlack(pc) ? {x:keyCX(n)-BW/2, w:BW} : {x:whiteX(n)+0.6, w:KW-1.2};
+}
+function startRibbon(n,v,col){
+  const b=ribbonBox(n);
+  const r={n, x:b.x, w:b.w, col, a:0.45+0.55*clamp(v/127,0,1), t0:performance.now(), t1:null};
+  ribbons.push(r); live.set(n,r);
+  if(ribbons.length>600) ribbons.splice(0, ribbons.length-600);
+  return r;
+}
+function endRibbon(n){
+  const r=live.get(n);
+  if(r){ r.t1=performance.now(); live.delete(n); }
+  return r;
+}
+/* 画面上のどこに鍵盤の x があるか。SVG は余白を作って収まるので、その分をずらす */
+function syncFlow(){
+  const el=$('kb'), cv=$('flow');
+  const r=el.getBoundingClientRect(), c=cv.getBoundingClientRect();
+  const vb=(el.getAttribute('viewBox')||'0 0 1196 288').split(/\s+/).map(Number);
+  const s=Math.min(r.width/vb[2], r.height/vb[3]);
+  G={s, ox:r.left+(r.width-vb[2]*s)/2-vb[0]*s-c.left, h:c.height, w:c.width};
+  const dpr=Math.min(devicePixelRatio||1, 2);
+  if(cv.width!==Math.round(c.width*dpr)||cv.height!==Math.round(c.height*dpr)){
+    cv.width=Math.round(c.width*dpr); cv.height=Math.round(c.height*dpr);
+  }
+}
+function drawFlow(){
+  if(!S.flow){ flowRaf=null; return; }
+  const cv=$('flow'), ctx=cv.getContext('2d');
+  if(!G) syncFlow();
+  const dpr=cv.width/(G.w||1);
+  ctx.setTransform(dpr,0,0,dpr,0,0);
+  ctx.clearRect(0,0,G.w,G.h);
+  const now=performance.now(), H=G.h, px=H/(S.flowSec*1000);   /* 1ミリ秒あたりの上り幅 */
+  for(let i=ribbons.length-1;i>=0;i--){
+    const r=ribbons[i];
+    const yTop=H-(now-r.t0)*px;
+    const yBot=H-(now-(r.t1===null?now:r.t1))*px;
+    if(yBot<-4){ ribbons.splice(i,1); continue; }
+    const x=G.ox+r.x*G.s, w=Math.max(2,r.w*G.s);
+    const y=Math.max(yTop,-8), hh=Math.min(yBot,H)-y;
+    if(hh<=0) continue;
+    ctx.globalAlpha=r.a;
+    ctx.fillStyle=r.col;
+    const rad=Math.min(4, w/2, hh/2);
+    ctx.beginPath();
+    if(ctx.roundRect) ctx.roundRect(x,y,w,hh,rad); else ctx.rect(x,y,w,hh);
+    ctx.fill();
+  }
+  ctx.globalAlpha=1;
+  flowRaf=requestAnimationFrame(drawFlow);
+}
+function flowStart(){
+  if(!S.flow||flowRaf!==null) return;
+  syncFlow();
+  flowRaf=requestAnimationFrame(drawFlow);
+}
 
 /* ===== 鍵盤（88鍵 A0=21〜C8=108） ===== */
 const KB_LO=21, KB_HI=108;
@@ -266,7 +371,7 @@ let raf=false;
 function render(){
   if(raf) return;
   raf=true;
-  requestAnimationFrame(()=>{ raf=false; drawKeyboard(); drawPedals(); });
+  requestAnimationFrame(()=>{ raf=false; drawKeyboard(); drawPedals(); syncFlow(); });
 }
 
 /* ===== 鍵盤のクリック（ピアノが無いときの確認用） ===== */
@@ -298,14 +403,20 @@ const LS='pm.keys.';
 function applyOpts(){
   document.body.classList.toggle('clear', S.clear);
   document.body.classList.toggle('noped', !S.showPed);
+  document.body.classList.toggle('flowon', S.flow);
   $('optVel').checked=S.showVel;
   $('optPed').checked=S.showPed;
   $('optClear').checked=S.clear;
+  $('optFlow').checked=S.flow;
+  $('flowSpd').value=Math.round(S.flowSec*10);
+  $('spdVal').textContent=S.flowSec.toFixed(1);
+  syncRibbons();
   render();
+  if(S.flow) flowStart();
 }
 function saveOpts(){
   try{ localStorage.setItem(LS+'opts',JSON.stringify(
-    {showVel:S.showVel, showPed:S.showPed, clear:S.clear})); }catch(e){}
+    {showVel:S.showVel, showPed:S.showPed, clear:S.clear, flow:S.flow, flowSec:S.flowSec})); }catch(e){}
 }
 (function loadOpts(){
   try{
@@ -313,20 +424,29 @@ function saveOpts(){
     if(typeof o.showVel==='boolean') S.showVel=o.showVel;
     if(typeof o.showPed==='boolean') S.showPed=o.showPed;
     if(typeof o.clear==='boolean') S.clear=o.clear;
+    if(typeof o.flow==='boolean') S.flow=o.flow;
+    if(typeof o.flowSec==='number') S.flowSec=clamp(o.flowSec,1,8);
   }catch(e){}
   /* URL のほうが強い。配信ソフトには ?clear=1&bar=0 のように渡す */
   S.showVel=qb('vel',S.showVel);
   S.showPed=qb('pedal',S.showPed);
   S.clear=qb('clear',S.clear);
+  S.flow=qb('flow',S.flow);
+  if(Q.has('sec')) S.flowSec=clamp(parseFloat(Q.get('sec'))||3, 1, 8);
   if(!qb('bar',true)) document.body.classList.add('nobar');
 })();
 
 $('btnConnect').addEventListener('click',()=>connectMidi(false));
-$('btnPanic').addEventListener('click',panic);
+$('optFlow').addEventListener('change',e=>{ S.flow=e.target.checked; saveOpts(); applyOpts(); });
+$('flowSpd').addEventListener('input',e=>{
+  S.flowSec=(+e.target.value)/10;
+  $('spdVal').textContent=S.flowSec.toFixed(1);
+  saveOpts();
+});
 $('optVel').addEventListener('change',e=>{ S.showVel=e.target.checked; saveOpts(); applyOpts(); });
 $('optPed').addEventListener('change',e=>{ S.showPed=e.target.checked; saveOpts(); applyOpts(); });
 $('optClear').addEventListener('change',e=>{ S.clear=e.target.checked; saveOpts(); applyOpts(); });
-addEventListener('resize',render);
+addEventListener('resize',()=>{ G=null; render(); });
 
 applyOpts();
 if(!navigator.requestMIDIAccess){

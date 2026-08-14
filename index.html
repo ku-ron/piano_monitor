@@ -34,9 +34,10 @@
     -webkit-text-size-adjust:100%;
   }
   .wrap{max-width:1280px;margin:0 auto;padding:12px 12px 48px}
-  h1{font-size:17px;margin:2px 0 10px;font-weight:600}
-  h1 .sub{font-size:12px;color:var(--dim);font-weight:400;margin-left:8px}
-  .panel{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:12px;margin-bottom:12px}
+  .topbar{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin:2px 0 8px}
+  h1{font-size:17px;margin:0;font-weight:600;flex:0 0 auto}
+  .topbar .stat{flex:1 1 auto;min-width:0}
+  .panel{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:10px;margin-bottom:10px}
   .panel h2{font-size:12px;margin:0 0 8px;color:var(--dim);font-weight:600;letter-spacing:.06em}
   .row{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
   button{
@@ -61,27 +62,32 @@
   .live{display:flex;gap:12px;align-items:flex-start;flex-wrap:nowrap;margin:10px 0 12px}
   /* iPad mini（横744px）でも1行に収まる配分にする。足りなければ五度圏が縮む */
   .keyRow{display:flex;gap:14px;align-items:flex-start;flex-wrap:nowrap}
-  .wheelBox{flex:0 1 440px;min-width:200px}
+  .wheelBox{flex:0 1 310px;min-width:170px}
   .wheelBox svg{display:block;width:100%;height:auto;touch-action:manipulation}
   .wheelBox svg .sec{cursor:pointer}
   .wheelBox svg .sec:hover .bg{fill:#31384a}
-  .wheelCap{text-align:center;font-size:13px;color:var(--dim);margin-top:2px}
-  .wheelCap b{color:var(--fg);font-size:15px;font-weight:600}
+  .wheelCap{font-size:13px;color:var(--dim);margin-bottom:8px}
+  .wheelCap b{color:var(--fg);font-size:16px;font-weight:600}
 
   /* ---- 調号の候補 ---- */
-  .krankBox{flex:1 1 210px;min-width:190px}
+  .krankBox{flex:1 1 300px;min-width:210px}
   .lbl{font-size:12px;color:var(--dim);margin-bottom:8px}
   .lbl .n{color:var(--dim2);white-space:nowrap}
-  .krank{display:flex;flex-direction:column;gap:7px}
-  .kr{display:flex;align-items:center;gap:7px;font-size:13px;flex-wrap:wrap}
-  .kr .sig{width:3.2em;flex:0 0 auto;text-align:right;color:var(--fg);font-weight:600;font-variant-numeric:tabular-nums}
-  .kr .kbar{flex:1 1 40px;height:12px;background:var(--panel2);border-radius:6px;overflow:hidden;min-width:30px}
+  /* 調号・長調・短調・グラフ の4列。文字数が変わっても幅は動かない */
+  .krank{display:flex;flex-direction:column;gap:6px}
+  .kr{
+    display:grid;grid-template-columns:2.6em minmax(0,1fr) minmax(0,1fr) minmax(46px,1.3fr);
+    gap:7px;align-items:center;font-size:13px;
+  }
+  .kr .sig{text-align:right;color:var(--fg);font-weight:600;font-variant-numeric:tabular-nums}
+  .kr .kbar{height:12px;background:var(--panel2);border-radius:6px;overflow:hidden}
   .kr .kbar i{display:block;height:100%;background:var(--dim2);border-radius:6px}
   .kr.top .kbar i{background:var(--accent)}
   .kr.top .sig{color:var(--accent)}
   .kr .chip{
     background:var(--panel2);border:1px solid var(--line);color:var(--dim);
-    border-radius:7px;padding:3px 9px;font-size:12px;min-height:0;cursor:pointer;
+    border-radius:8px;padding:8px 2px;font-size:13.5px;min-height:0;cursor:pointer;
+    width:100%;text-align:center;white-space:nowrap;
   }
   .kr .chip.cur{background:var(--accent);color:#06202c;border-color:var(--accent);font-weight:600}
   .kr .alt{font-size:11px;color:var(--dim2)}
@@ -89,20 +95,22 @@
   .krank .none{font-size:12px;color:var(--dim2)}
 
   /* ---- ピッチクラスの割合 ---- */
-  .pcBox{flex:1 1 240px;min-width:210px;max-width:420px}
+  /* グラフとつまみは下寄せ。リセットはその上に大きく置く */
+  .pcBox{flex:1 1 240px;min-width:210px;max-width:420px;
+         display:flex;flex-direction:column;justify-content:flex-end;gap:4px;align-self:stretch}
   .pcBox svg{display:block;width:100%;height:auto}
-  .pcBox .lbl{display:flex;align-items:center;justify-content:space-between;gap:8px}
-  .pcBox .lbl button{padding:3px 9px;font-size:11px;min-height:0;flex:0 0 auto;color:var(--dim)}
+  .pcBox .lbl{margin-bottom:0}
+  .pcBox .reset{width:100%;min-height:40px;font-size:13px;margin-bottom:4px}
   .winRow{display:flex;align-items:center;gap:8px;font-size:12px;color:var(--dim);margin-top:6px;flex-wrap:wrap}
   .winRow .t{white-space:nowrap}
   .winRow b{color:var(--fg);font-variant-numeric:tabular-nums;min-width:2.4em;text-align:right}
   .winRow input[type=range]{flex:1 1 auto;accent-color:var(--accent);min-width:90px}
   .staffBox{
     background:var(--paper);border-radius:10px;padding:6px 4px;
-    flex:0 1 250px;min-width:150px;
+    flex:0 1 185px;min-width:125px;
   }
   .staffBox svg{display:block;width:100%;height:auto}
-  .readout{flex:1 1 140px;min-width:120px;max-width:260px;display:flex;flex-direction:column;gap:10px}
+  .readout{flex:1 1 180px;min-width:130px;max-width:320px;display:flex;flex-direction:column;gap:10px}
   .chord{font-size:34px;font-weight:600;letter-spacing:.01em;line-height:1.1;min-height:38px}
   .chord .sm{font-size:20px;color:var(--dim);font-weight:400;margin-left:6px}
   .notes{font-size:14px;color:var(--dim);min-height:22px}
@@ -178,23 +186,19 @@
 <body>
 <div class="wrap">
 
-  <h1>ピアノ演奏モニタ<span class="sub">Web MIDI｜弾いた音を光らせ、楽譜にし、録って振り返る</span></h1>
+  <div class="topbar">
+    <h1>ピアノ演奏モニタ</h1>
+    <button id="btnConnect" class="primary">MIDIに接続</button>
+    <span id="status" class="stat">未接続 — ボタンを押して電子ピアノとつないでください</span>
+  </div>
 
   <section class="panel">
-    <div class="row">
-      <button id="btnConnect" class="primary">MIDIに接続</button>
-      <span id="status" class="stat">未接続 — ボタンを押して電子ピアノとつないでください</span>
-    </div>
-  </section>
-
-  <section class="panel">
-    <h2>調</h2>
     <div class="keyRow">
       <div class="wheelBox">
-        <svg id="wheel" viewBox="0 0 268 268" aria-label="調の選択（五度圏）"></svg>
-        <div class="wheelCap" id="keyCap">&nbsp;</div>
+        <svg id="wheel" viewBox="22 22 224 243" aria-label="調の選択（五度圏）"></svg>
       </div>
       <div class="krankBox">
+        <div class="wheelCap" id="keyCap">&nbsp;</div>
         <div class="lbl">弾いている音から見た調号の候補 <span class="n" id="krankN"></span></div>
         <div id="krank" class="krank"></div>
         <div class="hint">分かるのは<b>調号まで</b>です。長調か平行短調かは、使っている音の種類だけでは決まりません（どちらも同じ7音）。名前を押すとその調に切り替わります。<br>
@@ -217,8 +221,8 @@
         <div class="notes" id="noteList">&nbsp;</div>
       </div>
       <div class="pcBox">
-        <div class="lbl"><span>音の使われ方（最大を1とした割合）</span>
-          <button id="btnResetPc" title="調号の候補もいっしょにリセットします">集計をリセット</button></div>
+        <div class="lbl">音の使われ方（最大を1とした割合）</div>
+        <button id="btnResetPc" class="reset" title="調号の候補もいっしょにリセットします">集計をリセット</button>
         <svg id="pcChart" viewBox="0 0 304 132" aria-label="ピッチクラスごとの割合"></svg>
         <label class="winRow"><span class="t">直前 <b id="winVal">48</b> 音から集計</span>
           <input type="range" id="winSel" min="0" max="10" step="1" value="5">
@@ -230,7 +234,6 @@
   <section class="panel">
     <div class="kbBox"><svg id="kb" viewBox="0 -146 1196 288" preserveAspectRatio="xMidYMid meet"></svg></div>
     <div class="pedals" id="pedals"></div>
-    <div class="hint">上の棒は、いま鳴っている音のベロシティです（ペダルで残っている音も含みます）。青は指で押している音、黄はペダルで残っている音。鍵盤はクリック／タップでも鳴らせます。</div>
   </section>
 
   <section class="panel">
@@ -642,7 +645,7 @@ function drawKeyboard(){
 const SP=9, HS=SP/2;              /* 五線の間隔と、その半分（＝1段） */
 const TREB_E4_Y=126;              /* 高音部譜表の下線 E4 */
 const BASS_G2_Y=198;              /* 低音部譜表の下線 G2 */
-const STAFF_X0=14, STAFF_X1=236;
+const STAFF_X0=14, STAFF_X1=218;
 const yTreble = step => TREB_E4_Y-(step-30)*HS;
 const yBass   = step => BASS_G2_Y-(step-18)*HS;
 /* 表示範囲は固定。どの調でも 88鍵の両端（A0・C8）が最初から収まる高さにして
@@ -734,7 +737,7 @@ function drawStaff(){
   };
   const T=layout('t'), B=layout('b');
   const maxCol=Math.max(T.ncol,B.ncol);
-  const ACOL=1.15*SP;                      /* 変化記号1列ぶんの幅 */
+  const ACOL=1.05*SP;                      /* 変化記号1列ぶんの幅 */
   /* 音符は残りの幅の真ん中あたりに置く。左に寄せると右が間延びして見える */
   const NOTE_X = Math.max(ksEnd+1.6*SP+maxCol*ACOL, (ksEnd+STAFF_X1)/2);
 
@@ -872,15 +875,18 @@ function drawKeyRank(){
   $('krankN').textContent = n?`（直前${n}音）`:'';
   const list=keyScores();
   if(!list.length){ $('krank').innerHTML='<div class="none">まだ音が来ていません。弾くと、調号の候補がここに並びます。</div>'; return; }
-  $("krank").innerHTML=list.slice(0,5).map((r,i)=>{
+  const best=list[0].score;
+  $("krank").innerHTML=list.slice(0,5).map(r=>{
     const p=Math.round(clamp(r.score,0,1)*100);
     const mj=MAJ_BY_SIG[r.sig], mn=MIN_BY_SIG[r.sig];
     const chip=(idx,txt)=>`<button class="chip${idx===S.keyIdx?' cur':''}" data-k="${idx}">${txt}</button>`;
-    const alt = r.sig===6 ? `<span class="alt">＝${KEYS[MAJ_BY_SIG[-6]].label.split(' ')[0]}／${KEYS[MIN_BY_SIG[-6]].label.split(' ')[0]}m</span>` : '';
-    return `<div class="kr${i===0?' top':''}"><span class="sig">${sigLabel(r.sig)}</span>`
-      +`<span class="kbar"><i style="width:${p}%"></i></span>`
+    const alt = r.sig===6 ? `＝${KEYS[MAJ_BY_SIG[-6]].label.split(' ')[0]}／${KEYS[MIN_BY_SIG[-6]].label.split(' ')[0]}m` : '';
+    /* 同率一位が複数あれば、そのすべてを明るくする */
+    return `<div class="kr${r.score>=best-1e-9?' top':''}"${alt?` title="${alt}"`:''}>`
+      +`<span class="sig">${sigLabel(r.sig)}</span>`
       +chip(mj, KEYS[mj].label.split(' ')[0])
-      +chip(mn, KEYS[mn].label.split(' ')[0]+'m')+alt+`</div>`;
+      +chip(mn, KEYS[mn].label.split(' ')[0]+'m')
+      +`<span class="kbar"><i style="width:${p}%"></i></span></div>`;
   }).join('');
 }
 
